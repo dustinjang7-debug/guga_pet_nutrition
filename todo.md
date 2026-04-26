@@ -38,3 +38,7 @@
 
 - [ ] Add taurine, methionine, arginine columns to ingredient DB
 - [ ] Update AAFCO Cat profile to include taurine minimum
+
+## Bugs reported
+
+- [x] React warning: `<a>` cannot contain a nested `<a>` (AppShell logo wraps Link incorrectly)

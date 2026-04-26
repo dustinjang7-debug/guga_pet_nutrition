@@ -20,8 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <header className="border-b border-border/60 backdrop-blur-sm sticky top-0 z-30 bg-background/85">
         <div className="max-w-[1400px] mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-6">
-          <Link href="/">
-            <a className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 group">
               <div className="size-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
                 <Sprout className="size-5" strokeWidth={2.2} />
               </div>
@@ -29,19 +28,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="font-display text-base font-semibold">{t("appName", lang)}</div>
                 <div className="text-[11px] text-muted-foreground tracking-wide">{t("tagline", lang)}</div>
               </div>
-            </a>
           </Link>
 
           <nav className="flex items-center gap-1">
-            <Link href="/">
-              <a className={`px-3 py-1.5 text-sm rounded-md transition-colors ${location === "/" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                {t("nav_home", lang)}
-              </a>
+            <Link
+              href="/"
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${location === "/" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {t("nav_home", lang)}
             </Link>
-            <Link href="/recipe/new">
-              <a className={`px-3 py-1.5 text-sm rounded-md transition-colors ${location.startsWith("/recipe") ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                {t("nav_new", lang)}
-              </a>
+            <Link
+              href="/recipe/new"
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${location.startsWith("/recipe") ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {t("nav_new", lang)}
             </Link>
           </nav>
 
