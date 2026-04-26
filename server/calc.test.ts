@@ -123,9 +123,9 @@ describe("aafcoComparison", () => {
     expect(protein.status).toBe("below");
   });
 
-  it("converts mg minerals to g/kg DM (e.g., calcium)", () => {
-    // 100 g of any ingredient with calcium ~120 mg, water ~80 g → DM = 20 g
-    // Calcium per kg DM = 120 / (20/1000) = 6000 mg/kg DM = 6.0 g/kg DM
+  it("calcium per-kg-DM is computed in mg/kg DM (matches AAFCO threshold unit)", () => {
+    // 100 g of any ingredient with calcium >100 mg, water >70 g → DM < 30 g
+    // Calcium per kg DM = total_mg / (DM_g/1000) = total_mg * 1000 / DM_g
     const ing = Object.values(INGREDIENT_BY_ID).find(
       (i) => i.calcium_mg > 100 && i.water_g > 70,
     );
@@ -137,12 +137,34 @@ describe("aafcoComparison", () => {
     const ca = rows.find((r) => r.nutrient.key === "calcium_mg");
     expect(ca).toBeDefined();
     if (!ca) return;
-    // Hand calc:
-    //   total Ca = ing.calcium_mg, total DM = 100 - ing.water_g grams
-    //   mg_per_kgDM = total_mg / (DM_g/1000) = total_mg * 1000 / DM_g
-    //   g_per_kgDM = mg_per_kgDM / 1000 = total_mg / DM_g
-    const expectedG_per_kg = ing.calcium_mg / (100 - ing.water_g);
-    expect(ca.perKgDM).toBeCloseTo(expectedG_per_kg, 2);
+    // AAFCO unit for calcium is now mg/kg DM (not g/kg DM), so perKgDM is in mg.
+    const expectedMg_per_kg = (ing.calcium_mg * 1000) / (100 - ing.water_g);
+    expect(ca.perKgDM).toBeCloseTo(expectedMg_per_kg, 1);
+  });
+
+  it("REGRESSION: 6g eggshell powder in moderate recipe pushes Ca above min (not below)", () => {
+    // Eggshell powder ~34900 mg Ca / 100 g, ~0 water
+    // Recipe: 400g chicken breast (id 65) + 6g eggshell powder
+    // DM ≈ 100 + 6 = ~106 g  → Ca per kg DM ≈ (~2094 mg) / 0.106 kg ≈ 19,750 mg/kg DM
+    const eggshell = Object.values(INGREDIENT_BY_ID).find(
+      (i) => i.calcium_mg > 30000,
+    );
+    if (!eggshell) return;
+    const chicken = INGREDIENT_BY_ID[65];
+    if (!chicken) return;
+    const items: RecipeItem[] = [
+      { ingredientId: chicken.id, grams: 400 },
+      { ingredientId: eggshell.id, grams: 6 },
+    ];
+    const totals = recipeTotals(items);
+    const macros = recipeMacros(items, totals);
+    const rows = aafcoComparison(totals, macros, "dog", false);
+    const ca = rows.find((r) => r.nutrient.key === "calcium_mg");
+    expect(ca).toBeDefined();
+    if (!ca) return;
+    // Should be >= min (5000 mg/kg DM) and ideally not above max (25000)
+    expect(ca.perKgDM).toBeGreaterThan(5000);
+    expect(ca.status).not.toBe("below");
   });
 
   it("species selection picks the correct profile (cat protein min = 26 = 260 g/kg DM)", () => {

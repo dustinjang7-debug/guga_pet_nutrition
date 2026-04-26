@@ -92,3 +92,10 @@
 - [x] Center = IngredientPicker only (sticky, full viewport height)
 - [x] Right = AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
 - [x] Status band (red/green/orange) added to AafcoFixSheet header
+
+## v0.2.6 — AAFCO unit-mismatch bug (URGENT)
+
+- [ ] Audit AAFCO threshold units vs ingredient nutrient units (esp. B12, Ca, P, Na — eggshell 6g should easily pass Ca min)
+- [ ] Fix unit conversion in computeAafco (calc.ts)
+- [ ] Add regression test: 6g eggshell powder in a ~700g recipe → Ca within range, not below
+- [ ] Verify B12 (μg vs mg), Phosphorus (g vs mg/kg DM), Sodium (mg vs g/kg DM)

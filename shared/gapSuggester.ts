@@ -75,14 +75,10 @@ function gapToAbsolute(row: AafcoRow, totalDM_g: number): number {
   if (row.status !== "below" && row.status !== "borderline") return 0;
   const dmKg = totalDM_g / 1000;
   if (dmKg <= 0) return 0;
-  // delta is in display unit per kg DM
-  let absolute = row.delta * dmKg;
-  // If display unit is g/kg DM but source is mg, convertToPerKgDM divided by 1000.
-  // To get absolute mg we must therefore multiply by 1000.
-  if (row.nutrient.unit.startsWith("g/kg") && row.nutrient.key.endsWith("_mg")) {
-    absolute *= 1000;
-  }
-  return absolute;
+  // After the v0.2.6 unit fix, `perKgDM` (and therefore `delta`) is always
+  // expressed in the SAME unit as the source ingredient field (mg for _mg keys,
+  // μg for _ug keys, g for _g keys). So absolute shortfall is just delta × DM (kg).
+  return row.delta * dmKg;
 }
 
 /**

@@ -172,22 +172,18 @@ export interface AafcoRow {
  * Source nutrient is per recipe in mg / μg / g (per `_g`, `_mg`, `_ug` suffix).
  * AAFCO unit is one of: g/kg DM, mg/kg DM, μg/kg DM.
  */
-function convertToPerKgDM(totalInRecipe: number, nutrientKey: string, totalDM_g: number, displayUnit: string): number {
+function convertToPerKgDM(totalInRecipe: number, _nutrientKey: string, totalDM_g: number, _displayUnit: string): number {
   if (totalDM_g <= 0) return 0;
-  // recipe total per kg DM:
-  const perKg = totalInRecipe / (totalDM_g / 1000);
-  // No conversion needed because we keep the source key's unit and the AAFCO row's unit aligned.
-  // For protein/fat/carb the source is g and AAFCO unit is g/kg DM → identical.
-  // For minerals like Ca, source is mg, AAFCO row says g/kg DM → divide by 1000.
-  if (displayUnit.startsWith("g/kg") && nutrientKey.endsWith("_mg")) return perKg / 1000;
-  return perKg;
+  // Always express recipe nutrient amount per 1 kg of dry matter, in the SAME
+  // unit as the source data (g for g-keys, mg for _mg-keys, μg for _ug-keys).
+  // The AAFCO threshold table stores values in the matching native unit, so
+  // no further unit conversion is needed at compare time.
+  return totalInRecipe / (totalDM_g / 1000);
 }
 
-function convertToPer1000kcal(totalInRecipe: number, totalKcal: number, displayUnit: string, nutrientKey: string): number {
+function convertToPer1000kcal(totalInRecipe: number, totalKcal: number, _displayUnit: string, _nutrientKey: string): number {
   if (totalKcal <= 0) return 0;
-  const per1000 = (totalInRecipe / totalKcal) * 1000;
-  if (displayUnit.startsWith("g/kg") && nutrientKey.endsWith("_mg")) return per1000 / 1000;
-  return per1000;
+  return (totalInRecipe / totalKcal) * 1000;
 }
 
 export function aafcoComparison(
