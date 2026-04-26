@@ -1,0 +1,22 @@
+CREATE TABLE `recipes` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`name` varchar(200) NOT NULL,
+	`petName` varchar(100),
+	`petId` varchar(64),
+	`species` enum('dog','cat') NOT NULL,
+	`lifeStage` varchar(64) NOT NULL,
+	`bodyWeightKg` decimal(6,2) NOT NULL,
+	`lifeStageFactor` decimal(4,2) NOT NULL,
+	`feedingMode` enum('normal','weight_loss') NOT NULL DEFAULT 'normal',
+	`workflow` enum('wizard','simple') NOT NULL DEFAULT 'simple',
+	`startingVolumeG` int NOT NULL DEFAULT 1000,
+	`targetProteinPct` decimal(5,2),
+	`targetCarbPct` decimal(5,2),
+	`items` json NOT NULL,
+	`notes` text,
+	`status` enum('draft','approved') NOT NULL DEFAULT 'draft',
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `recipes_id` PRIMARY KEY(`id`)
+);

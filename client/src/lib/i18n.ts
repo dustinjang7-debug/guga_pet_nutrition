@@ -1,0 +1,359 @@
+/**
+ * Lightweight i18n. We don't need react-i18next for this scope —
+ * a typed dictionary + tiny hook is enough.
+ */
+
+import { useEffect, useState } from "react";
+
+export type Lang = "en" | "zh" | "th";
+
+const STORAGE_KEY = "guga.lang";
+
+const DICT = {
+  en: {
+    appName: "GUGA Nutrition",
+    tagline: "Fresh-food formulation, AAFCO-aligned",
+    nav_home: "Recipes",
+    nav_new: "New recipe",
+    nav_logout: "Sign out",
+    sign_in: "Sign in",
+    welcome_title: "Build complete and balanced fresh meals",
+    welcome_body: "A nutritionist's tool to compose pet recipes from a verified 238-ingredient database, with real-time AAFCO compliance for dogs and cats.",
+    cta_new_recipe: "Start a new recipe",
+    cta_view_recipes: "Open my recipes",
+
+    // Pet profile
+    pet_profile: "Pet profile",
+    species: "Species",
+    species_dog: "Dog",
+    species_cat: "Cat",
+    body_weight: "Body weight (kg)",
+    life_stage: "Life stage",
+    life_stage_factor: "Life-stage factor (DER multiplier)",
+    feeding_mode: "Feeding mode",
+    feeding_normal: "Normal",
+    feeding_weight_loss: "Weight loss",
+    pet_name: "Pet name (optional)",
+    pet_id: "Pet/Owner ID (optional)",
+
+    // Targets
+    target_macros: "Target macros (% DM)",
+    target_protein: "Protein",
+    target_carb: "Carbs",
+    target_fat_calc: "Fat (auto)",
+    macro_status_optimum: "Optimum",
+    macro_status_acceptable: "Acceptable",
+    macro_status_out_of_range: "Out of range",
+
+    // Builder
+    starting_volume: "Starting volume (g)",
+    used: "Used",
+    remaining: "Remaining",
+    over_volume: "Over volume",
+    workflow_choose: "How do you want to build?",
+    workflow_simple: "Simple Composer",
+    workflow_simple_desc: "Pick ingredients freely; we report what AAFCO nutrients are missing.",
+    workflow_wizard: "Guided Wizard",
+    workflow_wizard_desc: "Step-by-step recipe build (Protein → Carbs → vitamins → minerals).",
+
+    // Ingredient picker
+    add_ingredient: "Add ingredient",
+    search_placeholder: "Search ingredient (English / 中文 / ไทย)…",
+    rank_by: "Rank by",
+    direction_asc: "Lowest first",
+    direction_desc: "Highest first",
+    category_all: "All",
+
+    // Recipe view
+    recipe_items: "Recipe ingredients",
+    no_items: "No ingredients yet. Add the first one below.",
+    grams: "g",
+    remove: "Remove",
+
+    // Outputs
+    summary: "Summary",
+    total_grams: "Total weight",
+    total_kcal: "Total calories",
+    energy_density: "Energy density",
+    moisture: "Moisture",
+    dry_matter: "Dry matter",
+    daily_feeding: "Daily feeding amount",
+    daily_kcal_target: "Daily calorie target (DER)",
+    water_from_food: "Water from food",
+    water_still_needed: "Water still needed (bowl)",
+
+    // AAFCO
+    aafco_panel: "AAFCO compliance",
+    nutrient: "Nutrient",
+    in_recipe: "In recipe",
+    per_kg_dm: "per kg DM",
+    per_1000_kcal: "per 1000 kcal",
+    aafco_min: "AAFCO min",
+    aafco_max: "AAFCO max",
+    status: "Status",
+    status_below: "Below",
+    status_borderline: "Close",
+    status_ok: "OK",
+    status_above: "Above max",
+    status_no_target: "—",
+
+    // Save
+    save_recipe: "Save recipe",
+    update_recipe: "Update",
+    recipe_name: "Recipe name",
+    notes: "Notes",
+    status_draft: "Draft",
+    status_approved: "Approved",
+    saved_at: "Saved",
+    delete_recipe: "Delete",
+    confirm_delete: "Delete this recipe? This cannot be undone.",
+    export_pdf: "Export PDF",
+    export_csv: "Export CSV",
+
+    // Recipes list
+    my_recipes: "My recipes",
+    empty_recipes: "You haven't saved any recipes yet.",
+    recipe_empty: "No ingredients yet. Add your first one from the picker.",
+    current_recipe: "Current recipe",
+    ingredients_count: "ingredients",
+  },
+  zh: {
+    appName: "GUGA 营养",
+    tagline: "鲜食配方设计，AAFCO 标准对齐",
+    nav_home: "配方",
+    nav_new: "新建配方",
+    nav_logout: "登出",
+    sign_in: "登录",
+    welcome_title: "制作全面均衡的鲜食",
+    welcome_body: "营养师工具：从已核验的 238 种食材数据库构建宠物配方，针对犬猫实时进行 AAFCO 合规分析。",
+    cta_new_recipe: "新建配方",
+    cta_view_recipes: "查看我的配方",
+
+    pet_profile: "宠物资料",
+    species: "物种",
+    species_dog: "犬",
+    species_cat: "猫",
+    body_weight: "体重（公斤）",
+    life_stage: "生命阶段",
+    life_stage_factor: "生命阶段因子（DER 乘数）",
+    feeding_mode: "喂养模式",
+    feeding_normal: "正常",
+    feeding_weight_loss: "减肥",
+    pet_name: "宠物名（可选）",
+    pet_id: "宠物/主人编号（可选）",
+
+    target_macros: "目标宏量素（干物质 %）",
+    target_protein: "蛋白质",
+    target_carb: "碳水化合物",
+    target_fat_calc: "脂肪（自动）",
+    macro_status_optimum: "最优",
+    macro_status_acceptable: "可接受",
+    macro_status_out_of_range: "超出范围",
+
+    starting_volume: "起始容量（g）",
+    used: "已用",
+    remaining: "剩余",
+    over_volume: "超出容量",
+    workflow_choose: "选择创建方式",
+    workflow_simple: "简单模式",
+    workflow_simple_desc: "自由选择食材，系统报告 AAFCO 缺失的营养素。",
+    workflow_wizard: "引导向导",
+    workflow_wizard_desc: "分步构建（蛋白质 → 碳水 → 维生素 → 矿物质）。",
+
+    add_ingredient: "添加食材",
+    search_placeholder: "搜索食材（English / 中文 / ไทย）…",
+    rank_by: "排序",
+    direction_asc: "由低到高",
+    direction_desc: "由高到低",
+    category_all: "全部",
+
+    recipe_items: "配方食材",
+    no_items: "尚未添加食材。请在下方添加第一种。",
+    grams: "克",
+    remove: "移除",
+
+    summary: "摘要",
+    total_grams: "总重量",
+    total_kcal: "总热量",
+    energy_density: "能量密度",
+    moisture: "水分",
+    dry_matter: "干物质",
+    daily_feeding: "每日喂食量",
+    daily_kcal_target: "每日卡路里目标（DER）",
+    water_from_food: "食物中水分",
+    water_still_needed: "尚需饮水量（碗）",
+
+    aafco_panel: "AAFCO 合规",
+    nutrient: "营养素",
+    in_recipe: "配方含量",
+    per_kg_dm: "每千克干物质",
+    per_1000_kcal: "每 1000 千卡",
+    aafco_min: "AAFCO 最低",
+    aafco_max: "AAFCO 上限",
+    status: "状态",
+    status_below: "不足",
+    status_borderline: "接近",
+    status_ok: "达标",
+    status_above: "超过上限",
+    status_no_target: "—",
+
+    save_recipe: "保存配方",
+    update_recipe: "更新",
+    recipe_name: "配方名称",
+    notes: "备注",
+    status_draft: "草稿",
+    status_approved: "已批准",
+    saved_at: "已保存",
+    delete_recipe: "删除",
+    confirm_delete: "确定删除此配方？此操作不可撤销。",
+    export_pdf: "导出 PDF",
+    export_csv: "导出 CSV",
+
+    my_recipes: "我的配方",
+    empty_recipes: "尚未保存任何配方。",
+    recipe_empty: "尚未添加食材。请从右侧选择第一种。",
+    current_recipe: "当前配方",
+    ingredients_count: "种食材",
+  },
+  th: {
+    appName: "GUGA Nutrition",
+    tagline: "สูตรอาหารสด อ้างอิงมาตรฐาน AAFCO",
+    nav_home: "สูตรอาหาร",
+    nav_new: "สร้างสูตรใหม่",
+    nav_logout: "ออกจากระบบ",
+    sign_in: "เข้าสู่ระบบ",
+    welcome_title: "สร้างมื้ออาหารสดที่ครบถ้วนและสมดุล",
+    welcome_body: "เครื่องมือสำหรับนักโภชนาการ จัดสูตรจากฐานข้อมูลวัตถุดิบที่ผ่านการตรวจสอบ 238 รายการ พร้อมตรวจ AAFCO แบบเรียลไทม์สำหรับสุนัขและแมว",
+    cta_new_recipe: "สร้างสูตรใหม่",
+    cta_view_recipes: "ดูสูตรของฉัน",
+
+    pet_profile: "ข้อมูลสัตว์เลี้ยง",
+    species: "ชนิด",
+    species_dog: "สุนัข",
+    species_cat: "แมว",
+    body_weight: "น้ำหนักตัว (กก.)",
+    life_stage: "ช่วงวัย",
+    life_stage_factor: "ตัวคูณช่วงวัย (DER multiplier)",
+    feeding_mode: "โหมดการให้อาหาร",
+    feeding_normal: "ปกติ",
+    feeding_weight_loss: "ลดน้ำหนัก",
+    pet_name: "ชื่อสัตว์เลี้ยง (ไม่บังคับ)",
+    pet_id: "รหัสสัตว์/เจ้าของ (ไม่บังคับ)",
+
+    target_macros: "เป้าหมายมาโคร (% DM)",
+    target_protein: "โปรตีน",
+    target_carb: "คาร์โบไฮเดรต",
+    target_fat_calc: "ไขมัน (อัตโนมัติ)",
+    macro_status_optimum: "เหมาะที่สุด",
+    macro_status_acceptable: "ยอมรับได้",
+    macro_status_out_of_range: "เกินช่วง",
+
+    starting_volume: "ปริมาณเริ่มต้น (g)",
+    used: "ใช้ไป",
+    remaining: "เหลือ",
+    over_volume: "เกินปริมาณ",
+    workflow_choose: "เลือกวิธีสร้าง",
+    workflow_simple: "โหมดง่าย",
+    workflow_simple_desc: "เลือกวัตถุดิบอิสระ ระบบจะรายงานสารอาหารที่ขาด AAFCO",
+    workflow_wizard: "Wizard นำทาง",
+    workflow_wizard_desc: "สร้างทีละขั้น (โปรตีน → คาร์บ → วิตามิน → แร่ธาตุ)",
+
+    add_ingredient: "เพิ่มวัตถุดิบ",
+    search_placeholder: "ค้นหาวัตถุดิบ (English / 中文 / ไทย)…",
+    rank_by: "เรียงตาม",
+    direction_asc: "น้อยไปมาก",
+    direction_desc: "มากไปน้อย",
+    category_all: "ทั้งหมด",
+
+    recipe_items: "วัตถุดิบในสูตร",
+    no_items: "ยังไม่มีวัตถุดิบ เพิ่มรายการแรกด้านล่าง",
+    grams: "ก.",
+    remove: "ลบ",
+
+    summary: "สรุป",
+    total_grams: "น้ำหนักรวม",
+    total_kcal: "แคลอรีรวม",
+    energy_density: "ความหนาแน่นพลังงาน",
+    moisture: "ความชื้น",
+    dry_matter: "วัตถุแห้ง",
+    daily_feeding: "ปริมาณให้ต่อวัน",
+    daily_kcal_target: "พลังงานต่อวัน (DER)",
+    water_from_food: "น้ำจากอาหาร",
+    water_still_needed: "น้ำเพิ่มจากชาม",
+
+    aafco_panel: "AAFCO Compliance",
+    nutrient: "สารอาหาร",
+    in_recipe: "ในสูตร",
+    per_kg_dm: "ต่อ kg DM",
+    per_1000_kcal: "ต่อ 1000 kcal",
+    aafco_min: "AAFCO min",
+    aafco_max: "AAFCO max",
+    status: "สถานะ",
+    status_below: "ต่ำกว่า",
+    status_borderline: "ใกล้ขั้นต่ำ",
+    status_ok: "ผ่าน",
+    status_above: "เกิน max",
+    status_no_target: "—",
+
+    save_recipe: "บันทึกสูตร",
+    update_recipe: "อัปเดต",
+    recipe_name: "ชื่อสูตร",
+    notes: "บันทึก",
+    status_draft: "ร่าง",
+    status_approved: "อนุมัติแล้ว",
+    saved_at: "บันทึกเมื่อ",
+    delete_recipe: "ลบ",
+    confirm_delete: "ลบสูตรนี้? ไม่สามารถย้อนกลับได้",
+    export_pdf: "ส่งออก PDF",
+    export_csv: "ส่งออก CSV",
+
+    my_recipes: "สูตรของฉัน",
+    empty_recipes: "คุณยังไม่ได้บันทึกสูตรใด",
+    recipe_empty: "ยังไม่มีวัตถุดิบ เลือกตัวแรกจากรายการทางขวา",
+    current_recipe: "สูตรปัจจุบัน",
+    ingredients_count: "รายการ",
+  },
+} as const;
+
+export type DictKey = keyof typeof DICT["en"];
+
+let _lang: Lang =
+  (typeof window !== "undefined" && (localStorage.getItem(STORAGE_KEY) as Lang)) || "en";
+
+const listeners = new Set<(l: Lang) => void>();
+
+export function getLang(): Lang {
+  return _lang;
+}
+
+export function setLang(l: Lang) {
+  _lang = l;
+  if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, l);
+  listeners.forEach((fn) => fn(l));
+}
+
+export function useLang(): [Lang, (l: Lang) => void] {
+  const [lang, setLocal] = useState<Lang>(_lang);
+  useEffect(() => {
+    const fn = (l: Lang) => setLocal(l);
+    listeners.add(fn);
+    return () => {
+      listeners.delete(fn);
+    };
+  }, []);
+  return [lang, setLang];
+}
+
+export function t(key: DictKey, lang: Lang = _lang): string {
+  return DICT[lang][key] ?? DICT.en[key] ?? key;
+}
+
+/** Get the localized name of an ingredient given the active language. */
+export function ingredientName(
+  ing: { name_en: string; name_zh: string; name_th: string },
+  lang: Lang,
+): string {
+  if (lang === "zh") return ing.name_zh || ing.name_en;
+  if (lang === "th") return ing.name_th || ing.name_en;
+  return ing.name_en || ing.name_zh;
+}
