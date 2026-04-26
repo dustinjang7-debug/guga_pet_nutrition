@@ -258,7 +258,14 @@ export default function WizardPage() {
               </div>
             </Card>
 
-            <SummaryCard macros={macros} daily={daily} lang={lang} />
+            <SummaryCard
+              macros={macros}
+              daily={daily}
+              totals={totals}
+              species={pet.species}
+              isGrowth={isGrowth}
+              lang={lang}
+            />
           </div>
 
           {/* Center: step card */}

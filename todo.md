@@ -62,7 +62,8 @@
 - [x] **Bug fix**: Wizard `addOrUpdateItem` was double-counting on repeated Add clicks — split into `upsertItem` (Wizard suggestion: replace) and `incrementItem` (Compliance Check: top up)
 - [x] Wizard step: free ingredient search across all 238 items (EN/ZH/TH name match)
 - [x] Vitest reactivity contract test (5 tests, all 32 passing)
-- [ ] Catalog of every nutrient column in DB (label_en/zh/th, unit, group)
-- [ ] `nutrientProfile()` helper returning every nutrient as TOTAL + per-kg-DM + per-1000-kcal
-- [ ] SummaryCard "View full nutrient profile" dialog showing the full grouped table
-- [ ] Ca:P ratio helper + display (golden 1.2:1 – 1.4:1, color coded)
+- [x] Catalog of every nutrient column in DB (label_en/zh/th, unit, group)
+- [x] `nutrientProfile()` helper returning every nutrient as TOTAL + per-kg-DM + per-1000-kcal
+- [x] SummaryCard "View full nutrient profile" dialog showing the full grouped table
+- [x] Ca:P ratio helper + display (golden 1.2:1 – 1.4:1, color coded with visual band)
+- [x] Vitest tests (12 new) for caPhosphorusRatio + nutrientProfile (44/44 passing)

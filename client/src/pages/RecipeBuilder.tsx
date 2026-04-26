@@ -254,7 +254,14 @@ export default function RecipeBuilder() {
               lang={lang}
               currentMacros={macros}
             />
-            <SummaryCard macros={macros} daily={daily} lang={lang} />
+            <SummaryCard
+              macros={macros}
+              daily={daily}
+              totals={totals}
+              species={pet.species}
+              isGrowth={isGrowth}
+              lang={lang}
+            />
           </div>
 
           {/* Center: ingredient picker + recipe items */}

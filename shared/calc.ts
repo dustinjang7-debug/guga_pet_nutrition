@@ -278,3 +278,168 @@ export function dailyFeed(
     waterStillNeeded_mL: stillNeeded,
   };
 }
+
+// ============================================================================
+// Calcium : Phosphorus ratio
+// ============================================================================
+//
+// AAFCO and NRC both flag Ca:P balance as the single most important mineral
+// ratio in homemade pet food. Imbalances cause secondary nutritional
+// hyperparathyroidism in growing dogs/cats.
+//
+//   AAFCO Ca:P (adult dog):    1.0 : 1  to  2.0 : 1
+//   AAFCO Ca:P (growth dog):   1.0 : 1  to  1.8 : 1
+//   AAFCO Ca:P (adult cat):    0.9 : 1  to  2.0 : 1
+//
+// The clinically preferred "golden range" used by GUGA is 1.2 : 1 – 1.4 : 1,
+// inside the AAFCO band but tighter for everyday formulation.
+
+export type CaPRatioStatus =
+  | "empty"      // no Ca or P data yet
+  | "golden"    // 1.2–1.4 : 1 (preferred)
+  | "ok"        // inside AAFCO band but outside golden
+  | "low"       // ratio < AAFCO min
+  | "high";     // ratio > AAFCO max
+
+export interface CaPRatio {
+  ratio: number;          // Ca / P (unitless)
+  status: CaPRatioStatus;
+  goldenMin: number;      // 1.2
+  goldenMax: number;      // 1.4
+  aafcoMin: number;       // species-aware
+  aafcoMax: number;       // species-aware
+  calcium_mg: number;
+  phosphorus_mg: number;
+}
+
+/**
+ * Compute the Ca:P ratio for a recipe and classify it against AAFCO bands.
+ * `species` and `isGrowth` widen/narrow the AAFCO acceptable range.
+ */
+export function caPhosphorusRatio(
+  totals: NutrientTotals,
+  species: Species = "dog",
+  isGrowth = false,
+): CaPRatio {
+  const goldenMin = 1.2;
+  const goldenMax = 1.4;
+  // AAFCO acceptable bands (the lower bound varies by species, upper by stage)
+  let aafcoMin: number;
+  let aafcoMax: number;
+  if (species === "cat") {
+    aafcoMin = 0.9;
+    aafcoMax = 2.0;
+  } else {
+    aafcoMin = 1.0;
+    aafcoMax = isGrowth ? 1.8 : 2.0;
+  }
+
+  const ca = totals.calcium_mg;
+  const p = totals.phosphorus_mg;
+
+  if (ca <= 0 || p <= 0) {
+    return {
+      ratio: 0,
+      status: "empty",
+      goldenMin, goldenMax, aafcoMin, aafcoMax,
+      calcium_mg: ca, phosphorus_mg: p,
+    };
+  }
+  const ratio = ca / p;
+  let status: CaPRatioStatus;
+  if (ratio < aafcoMin) status = "low";
+  else if (ratio > aafcoMax) status = "high";
+  else if (ratio >= goldenMin && ratio <= goldenMax) status = "golden";
+  else status = "ok";
+  return { ratio, status, goldenMin, goldenMax, aafcoMin, aafcoMax, calcium_mg: ca, phosphorus_mg: p };
+}
+
+// ============================================================================
+// Full nutrient profile (for the Excel-style summary table)
+// ============================================================================
+//
+// One row per nutrient column in the DB, with TOTAL + per-kg-DM + per-1000-kcal
+// presentation values. This mirrors the user's reference Excel layout
+// (营养成分总含量) and is rendered by SummaryCard's "View full nutrient profile"
+// dialog.
+
+export type NutrientGroup =
+  | "macro"
+  | "energy"
+  | "fiber_other"
+  | "vitamin"
+  | "mineral";
+
+export interface NutrientCatalogEntry {
+  key: keyof NutrientTotals;
+  label_en: string;
+  label_zh: string;
+  label_th: string;
+  unit: "g" | "mg" | "ug" | "kcal";
+  group: NutrientGroup;
+}
+
+/**
+ * Display order + i18n labels for every nutrient column in the DB.
+ * If you add a column to `Ingredient`, add it here too.
+ */
+export const NUTRIENT_CATALOG: NutrientCatalogEntry[] = [
+  // Macros
+  { key: "water_g",         label_en: "Water",          label_zh: "水分",       label_th: "น้ำ",           unit: "g",   group: "macro" },
+  { key: "energy_kcal",     label_en: "Energy",         label_zh: "能量",       label_th: "พลังงาน",       unit: "kcal",group: "energy" },
+  { key: "protein_g",       label_en: "Protein",        label_zh: "蛋白质",     label_th: "โปรตีน",        unit: "g",   group: "macro" },
+  { key: "fat_g",           label_en: "Fat",            label_zh: "脂肪",       label_th: "ไขมัน",         unit: "g",   group: "macro" },
+  { key: "carb_g",          label_en: "Carbohydrate",   label_zh: "碳水化合物", label_th: "คาร์โบไฮเดรต", unit: "g",   group: "macro" },
+  { key: "fiber_g",         label_en: "Dietary fiber",  label_zh: "膳食纤维",   label_th: "ใยอาหาร",       unit: "g",   group: "fiber_other" },
+  { key: "cholesterol_mg",  label_en: "Cholesterol",    label_zh: "胆固醇",     label_th: "คอเลสเตอรอล",   unit: "mg",  group: "fiber_other" },
+
+  // Vitamins
+  { key: "vit_a_re_ug",     label_en: "Vitamin A (RE)", label_zh: "维生素A",    label_th: "วิตามินเอ",     unit: "ug",  group: "vitamin" },
+  { key: "vit_b1_mg",       label_en: "Vitamin B1",     label_zh: "维生素B1",   label_th: "วิตามินบี1",    unit: "mg",  group: "vitamin" },
+  { key: "vit_b2_mg",       label_en: "Vitamin B2",     label_zh: "维生素B2",   label_th: "วิตามินบี2",    unit: "mg",  group: "vitamin" },
+  { key: "niacin_mg",       label_en: "Vitamin B3 (Niacin)", label_zh: "维生素B3 烟酸", label_th: "วิตามินบี3", unit: "mg",  group: "vitamin" },
+  { key: "vit_b5_mg",       label_en: "Vitamin B5",     label_zh: "维生素B5",   label_th: "วิตามินบี5",    unit: "mg",  group: "vitamin" },
+  { key: "vit_b6_mg",       label_en: "Vitamin B6",     label_zh: "维生素B6",   label_th: "วิตามินบี6",    unit: "mg",  group: "vitamin" },
+  { key: "folate_mg",       label_en: "Folate (B9)",    label_zh: "叶酸 B9",    label_th: "โฟเลต บี9",     unit: "mg",  group: "vitamin" },
+  { key: "vit_b12_ug",      label_en: "Vitamin B12",    label_zh: "维生素B12",  label_th: "วิตามินบี12",   unit: "ug",  group: "vitamin" },
+  { key: "choline_mg",      label_en: "Choline",        label_zh: "胆碱",       label_th: "โคลีน",         unit: "mg",  group: "vitamin" },
+  { key: "vit_c_mg",        label_en: "Vitamin C",      label_zh: "维生素C",    label_th: "วิตามินซี",     unit: "mg",  group: "vitamin" },
+  { key: "vit_d_ug",        label_en: "Vitamin D",      label_zh: "维生素D",    label_th: "วิตามินดี",     unit: "ug",  group: "vitamin" },
+  { key: "vit_e_mg",        label_en: "Vitamin E",      label_zh: "维生素E",    label_th: "วิตามินอี",     unit: "mg",  group: "vitamin" },
+
+  // Minerals
+  { key: "calcium_mg",      label_en: "Calcium",        label_zh: "钙",         label_th: "แคลเซียม",      unit: "mg",  group: "mineral" },
+  { key: "phosphorus_mg",   label_en: "Phosphorus",     label_zh: "磷",         label_th: "ฟอสฟอรัส",      unit: "mg",  group: "mineral" },
+  { key: "potassium_mg",    label_en: "Potassium",      label_zh: "钾",         label_th: "โพแทสเซียม",    unit: "mg",  group: "mineral" },
+  { key: "sodium_mg",       label_en: "Sodium",         label_zh: "钠",         label_th: "โซเดียม",       unit: "mg",  group: "mineral" },
+  { key: "magnesium_mg",    label_en: "Magnesium",      label_zh: "镁",         label_th: "แมกนีเซียม",    unit: "mg",  group: "mineral" },
+  { key: "iron_mg",         label_en: "Iron",           label_zh: "铁",         label_th: "เหล็ก",         unit: "mg",  group: "mineral" },
+  { key: "zinc_mg",         label_en: "Zinc",           label_zh: "锌",         label_th: "สังกะสี",       unit: "mg",  group: "mineral" },
+  { key: "selenium_ug",     label_en: "Selenium",       label_zh: "硒",         label_th: "ซีลีเนียม",     unit: "ug",  group: "mineral" },
+  { key: "copper_mg",       label_en: "Copper",         label_zh: "铜",         label_th: "ทองแดง",        unit: "mg",  group: "mineral" },
+  { key: "manganese_mg",    label_en: "Manganese",      label_zh: "锰",         label_th: "แมงกานีส",      unit: "mg",  group: "mineral" },
+];
+
+export interface NutrientProfileRow extends NutrientCatalogEntry {
+  total: number;            // value summed across recipe in `unit`
+  perKgDM: number;          // value scaled to 1 kg of dry matter (in `unit`)
+  per1000kcal: number;      // value per 1000 kcal of metabolizable energy
+}
+
+/**
+ * Build a per-nutrient table mirroring the user's Excel reference.
+ * Rendered by the "View full nutrient profile" dialog.
+ */
+export function nutrientProfile(
+  totals: NutrientTotals,
+  macros: RecipeMacros,
+): NutrientProfileRow[] {
+  const dmKg = macros.totalDryMatter_g / 1000;
+  const kcal = macros.totalKcal;
+  return NUTRIENT_CATALOG.map((entry) => {
+    const total = totals[entry.key] ?? 0;
+    const perKgDM = dmKg > 0 ? total / dmKg : 0;
+    const per1000kcal = kcal > 0 ? (total / kcal) * 1000 : 0;
+    return { ...entry, total, perKgDM, per1000kcal };
+  });
+}
