@@ -45,11 +45,14 @@ export function AafcoPanel({
   lang,
   basis,
   setBasis,
+  onAutoFix,
 }: {
   rows: AafcoRow[];
   lang: Lang;
   basis: "dm" | "me";
   setBasis: (b: "dm" | "me") => void;
+  /** Optional: when supplied, a small "Fix" link is rendered next to each below/borderline row, surfacing the gap suggester. */
+  onAutoFix?: (nutrientKey: string) => void;
 }) {
   const counts = rows.reduce(
     (acc, r) => {
@@ -133,22 +136,33 @@ export function AafcoPanel({
                     {row.max !== null ? fmt(row.max, row.nutrient.unit) : "—"}
                   </td>
                   <td className="text-right px-5 py-2">
-                    <TooltipProvider delayDuration={200}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] uppercase font-medium ${statusClass(row.status)}`}>
-                            {statusLabel(row.status, lang)}
-                          </span>
-                        </TooltipTrigger>
-                        {row.delta !== 0 && (
-                          <TooltipContent>
-                            <span data-numeric="true" className="text-xs">
-                              Δ {fmt(row.delta, row.nutrient.unit)} {row.nutrient.unit}
+                    <div className="inline-flex items-center gap-1.5">
+                      {onAutoFix && (row.status === "below" || row.status === "borderline") && (
+                        <button
+                          onClick={() => onAutoFix(row.nutrient.key)}
+                          className="text-[10px] font-medium text-primary hover:underline"
+                          title={lang === "zh" ? "自动修复建议" : lang === "th" ? "คำแนะนำเสริม" : "Auto-fix"}
+                        >
+                          {lang === "zh" ? "修复" : lang === "th" ? "เสริม" : "Fix"}
+                        </button>
+                      )}
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] uppercase font-medium ${statusClass(row.status)}`}>
+                              {statusLabel(row.status, lang)}
                             </span>
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    </TooltipProvider>
+                          </TooltipTrigger>
+                          {row.delta !== 0 && (
+                            <TooltipContent>
+                              <span data-numeric="true" className="text-xs">
+                                Δ {fmt(row.delta, row.nutrient.unit)} {row.nutrient.unit}
+                              </span>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </td>
                 </tr>
               );

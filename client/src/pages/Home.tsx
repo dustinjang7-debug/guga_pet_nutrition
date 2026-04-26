@@ -150,10 +150,16 @@ function RecipesList({ onNew }: { onNew: () => void }) {
             {t("my_recipes", lang)}
           </h1>
         </div>
-        <Button onClick={onNew} size="lg">
-          <FilePen className="size-4 mr-1.5" />
-          {t("nav_new", lang)}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => (window.location.href = "/wizard/new")} size="lg" variant="default">
+            <Sparkles className="size-4 mr-1.5" />
+            {t("workflow_wizard", lang)}
+          </Button>
+          <Button onClick={onNew} size="lg" variant="outline">
+            <FilePen className="size-4 mr-1.5" />
+            {t("workflow_simple", lang)}
+          </Button>
+        </div>
       </div>
 
       {recipesQuery.isLoading ? (
@@ -163,9 +169,15 @@ function RecipesList({ onNew }: { onNew: () => void }) {
       ) : !recipesQuery.data || recipesQuery.data.length === 0 ? (
         <Card className="p-16 text-center bg-secondary/40 border-dashed">
           <p className="text-muted-foreground">{t("empty_recipes", lang)}</p>
-          <Button className="mt-6" onClick={onNew}>
-            {t("cta_new_recipe", lang)}
-          </Button>
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <Button onClick={() => (window.location.href = "/wizard/new")}>
+              <Sparkles className="size-4 mr-1.5" />
+              {t("workflow_wizard", lang)}
+            </Button>
+            <Button variant="outline" onClick={onNew}>
+              {t("workflow_simple", lang)}
+            </Button>
+          </div>
         </Card>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

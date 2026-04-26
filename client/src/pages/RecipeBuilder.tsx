@@ -26,6 +26,7 @@ import { IngredientPicker } from "@/components/recipe/IngredientPicker";
 import { RecipeItemsList } from "@/components/recipe/RecipeItemsList";
 import { AafcoPanel } from "@/components/recipe/AafcoPanel";
 import { SummaryCard } from "@/components/recipe/SummaryCard";
+import { AafcoFixSheet } from "@/components/recipe/AafcoFixSheet";
 
 export default function RecipeBuilder() {
   const [lang] = useLang();
@@ -96,6 +97,9 @@ export default function RecipeBuilder() {
     () => dailyFeed(pet.bodyWeightKg, pet.factor, macros),
     [pet.bodyWeightKg, pet.factor, macros],
   );
+
+  // Auto-fix sheet
+  const [fixForKey, setFixForKey] = useState<string | null>(null);
 
   // Add / change / remove
   function addIngredient(ing: Ingredient, defaultGrams: number) {
@@ -263,8 +267,34 @@ export default function RecipeBuilder() {
 
           {/* Right: AAFCO panel */}
           <div className="col-span-12 lg:col-span-4">
-            <AafcoPanel rows={aafco} lang={lang} basis={basis} setBasis={setBasis} />
+            <AafcoPanel
+              rows={aafco}
+              lang={lang}
+              basis={basis}
+              setBasis={setBasis}
+              onAutoFix={(k) => setFixForKey(k)}
+            />
           </div>
+          <AafcoFixSheet
+            open={fixForKey !== null}
+            onOpenChange={(o) => !o && setFixForKey(null)}
+            nutrientKey={fixForKey}
+            aafco={aafco}
+            items={items}
+            totalDM_g={macros.totalDryMatter_g}
+            onAdd={(ingredientId, grams) => {
+              setItems((prev) => {
+                const idx = prev.findIndex((p) => p.ingredientId === ingredientId);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = { ingredientId, grams: prev[idx].grams + grams };
+                  return next;
+                }
+                return [...prev, { ingredientId, grams }];
+              });
+              setFixForKey(null);
+            }}
+          />
         </div>
       </div>
     </AppShell>

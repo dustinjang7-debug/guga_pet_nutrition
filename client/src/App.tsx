@@ -6,13 +6,16 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import RecipeBuilder from "./pages/RecipeBuilder";
+import WizardPage from "./pages/WizardPage";
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
-      <Route path={"/new"} component={RecipeBuilder} />
-      <Route path={"/recipes/:id"} component={RecipeBuilder} />
+      <Route path={"/recipe/new"} component={RecipeBuilder} />
+      <Route path={"/recipe/:id"} component={RecipeBuilder} />
+      <Route path={"/wizard/new"} component={WizardPage} />
+      <Route path={"/wizard/:id"} component={WizardPage} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

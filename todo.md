@@ -18,13 +18,19 @@
 
 ## v0.2 — Guided Wizard (next iteration)
 
-- [ ] 12-step wizard (Protein → Carbs → Vit A → Vit B → Choline → Vit E → Vit D → Iron → Zinc → Calcium → Phosphorus → Sodium)
-- [ ] Suggestion cards with default ingredients (chicken liver, brewer's yeast, egg yolk, eggshell powder, etc.)
-- [ ] Top-N sortable lists for each nutrient step
+- [x] 13-step wizard config (shared/wizard.ts)
+- [x] Build WizardPage with progress bar + step cards (Accept/Change/Skip/Back)
+- [x] Live AAFCO delta per step against target nutrient
+- [x] Routes `/wizard/new` and `/wizard/:id`; CTA on Home + AppShell
+- [x] Step 14: Compliance Check — list every still-unmet AAFCO nutrient with two remediation paths per gap (fresh ingredient OR food additive)
+- [x] On finish → save dialog (or open Simple Composer to fine-tune)
+- [x] Reuse additive suggester as Auto-fix chips + sheet in Simple Composer's AafcoPanel
+- [x] Vitest tests for nutrient-gap-suggester (11 tests passing)
+- [x] Fixed broken /new and /recipes/:id routes — canonical /recipe/new + /recipe/:id
 
 ## v0.3 — Simple Composer enhancements
 
-- [ ] Auto-suggest food additives to close AAFCO gaps (eggshell powder, salt, oils, brewer's yeast)
+- [x] Auto-suggest food additives to close AAFCO gaps (eggshell powder, salt, oils, brewer's yeast)
 
 ## v0.4 — Export & polish
 
@@ -42,3 +48,5 @@
 ## Bugs reported
 
 - [x] React warning: `<a>` cannot contain a nested `<a>` (AppShell logo wraps Link incorrectly)
+- [ ] Verify nested-anchor warning is gone after browser hard-refresh
+- [ ] User to publish once v0.2 is done so manus.space domain serves latest build

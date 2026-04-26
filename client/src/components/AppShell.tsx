@@ -38,10 +38,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {t("nav_home", lang)}
             </Link>
             <Link
+              href="/wizard/new"
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${location.startsWith("/wizard") ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {t("workflow_wizard", lang)}
+            </Link>
+            <Link
               href="/recipe/new"
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${location.startsWith("/recipe") ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
-              {t("nav_new", lang)}
+              {t("workflow_simple", lang)}
             </Link>
           </nav>
 
