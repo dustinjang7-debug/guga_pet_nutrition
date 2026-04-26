@@ -201,7 +201,7 @@ export default function WizardPage() {
   // ----- Render --------------------------------------------------------------
   return (
     <AppShell>
-      <div className="container max-w-[1400px] py-6 lg:py-8">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-4 sm:py-6 lg:py-8">
         <WizardHeader
           stepIdx={stepIdx}
           totalSteps={TOTAL_STEPS}
@@ -212,9 +212,9 @@ export default function WizardPage() {
           isEditing={isEditing}
         />
 
-        <div className="grid grid-cols-12 gap-5 mt-6">
+        <div className="grid grid-cols-12 gap-4 sm:gap-5 mt-4 sm:mt-6">
           {/* Left rail: Pet Profile + Starting Volume + Summary */}
-          <div className="col-span-12 lg:col-span-3 space-y-4 lg:sticky lg:top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+          <div className="col-span-12 lg:col-span-3 space-y-4 lg:sticky lg:top-20 self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
             <PetProfilePane value={pet} onChange={setPet} lang={lang} />
 
             <Card className="p-4 space-y-2">
@@ -333,12 +333,12 @@ function WizardHeader({
     : `ขั้นที่ ${stepIdx + 1} / ${totalSteps - 1}`;
 
   return (
-    <div className="flex items-end justify-between gap-4">
-      <div className="flex-1">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 sm:gap-4">
+      <div className="flex-1 min-w-0">
         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
           <Sparkles className="size-3" /> {t("workflow_wizard", lang)}
         </div>
-        <h1 className="font-display text-3xl font-bold mt-1">
+        <h1 className="font-display text-2xl sm:text-3xl font-bold mt-1 truncate">
           {recipeName || t("nav_new", lang)}
         </h1>
         <div className="mt-3 max-w-md">

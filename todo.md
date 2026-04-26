@@ -50,3 +50,9 @@
 - [x] React warning: `<a>` cannot contain a nested `<a>` (AppShell logo wraps Link incorrectly)
 - [ ] Verify nested-anchor warning is gone after browser hard-refresh
 - [ ] User to publish once v0.2 is done so manus.space domain serves latest build
+
+## Bugs reported (v0.2 mobile)
+
+- [x] AppShell header overflows on iPhone width — rewrote with hamburger menu under md, single-button language cycler, hidden tagline
+- [x] WizardPage cards overlap on mobile width — sticky only at lg+, removed double padding from custom container
+- [ ] User to re-publish after mobile fixes
