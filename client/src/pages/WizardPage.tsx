@@ -15,7 +15,8 @@ import {
 import { trpc } from "@/lib/trpc";
 import { ingredientName, t, useLang } from "@/lib/i18n";
 import {
-  type AafcoRow, aafcoComparison, dailyFeed, recipeMacros, recipeTotals, type RecipeItem,
+  type AafcoRow, aafcoComparison, carbKcalShare, type CarbKcalShare,
+  dailyFeed, type NutrientTotals, recipeMacros, recipeTotals, type RecipeItem,
 } from "@shared/calc";
 import { CAT_LIFE_STAGES, DOG_LIFE_STAGES } from "@shared/aafco";
 import { INGREDIENTS, INGREDIENT_BY_ID, type Ingredient } from "@shared/ingredients";
@@ -276,6 +277,7 @@ export default function WizardPage() {
                 pet={pet}
                 items={items}
                 aafco={aafco}
+                totals={totals}
                 startingVolume={startingVolume}
                 onAdd={upsertItem}
                 onSetGrams={setItemGrams}
@@ -388,6 +390,57 @@ function WizardHeader({
 }
 
 // ============================================================================
+// Carb kcal-share panel (used inside carb steps)
+// ============================================================================
+
+function CarbKcalSharePanel({
+  share,
+  species,
+  lang,
+}: {
+  share: CarbKcalShare;
+  species: "dog" | "cat";
+  lang: "en" | "zh" | "th";
+}) {
+  const labelMap = {
+    en: { title: "Carbs as % of calories", optimal: "Optimal", ok: "OK", low: "Too low", high: "Too high", empty: "Add ingredients to compute" },
+    zh: { title: "碳水占总卡路里 %",      optimal: "最佳", ok: "可接受", low: "过低", high: "过高", empty: "添加食材以计算" },
+    th: { title: "คาร์บ % ของแคลอรี",   optimal: "เหมาะสม", ok: "ยอมรับได้", low: "ต่ำเกินไป", high: "สูงเกินไป", empty: "เพิ่มวัตถุดิบเพื่อคำนวณ" },
+  };
+  const L = labelMap[lang];
+
+  let badge = "bg-secondary text-muted-foreground";
+  let badgeText: string;
+  if (share.status === "empty") { badgeText = L.empty; }
+  else if (share.status === "optimal") { badge = "bg-emerald-100 text-emerald-700"; badgeText = L.optimal; }
+  else if (share.status === "ok")      { badge = "bg-amber-100 text-amber-700";   badgeText = L.ok; }
+  else if (share.status === "alert_low")  { badge = "bg-red-100 text-red-700";    badgeText = L.low; }
+  else                                  { badge = "bg-red-100 text-red-700";       badgeText = L.high; }
+
+  // Pretty range string per species
+  const range = species === "cat" ? "0–10% optimal · 10–20% ok · ≥20% alert" : "20–30% optimal · 30–40% ok · <20% or >40% alert";
+
+  return (
+    <div className="rounded-md border border-border p-3 bg-card space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{L.title}</div>
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${badge}`}>{badgeText}</span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span data-numeric="true" className="text-2xl font-semibold">
+          {share.status === "empty" ? "—" : share.pct.toFixed(1)}
+        </span>
+        <span className="text-sm text-muted-foreground">%</span>
+        <span className="text-xs text-muted-foreground ml-auto" data-numeric="true">
+          {share.carb_g.toFixed(0)} g · {share.carb_kcal.toFixed(0)} kcal
+        </span>
+      </div>
+      <div className="text-[10px] text-muted-foreground">{range}</div>
+    </div>
+  );
+}
+
+// ============================================================================
 // Nutrient step card (Steps 1..13)
 // ============================================================================
 
@@ -396,6 +449,7 @@ function NutrientStepCard({
   pet,
   items,
   aafco,
+  totals,
   startingVolume,
   onAdd,
   onSetGrams,
@@ -407,6 +461,7 @@ function NutrientStepCard({
   pet: PetProfileState;
   items: RecipeItem[];
   aafco: AafcoRow[];
+  totals: NutrientTotals;
   startingVolume: number;
   onAdd: (ingredientId: number, grams: number) => void;
   onSetGrams: (ingredientId: number, grams: number) => void;
@@ -670,6 +725,11 @@ function NutrientStepCard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Carb kcal-share gate (grains+roots together) */}
+      {step.kind === "macro_carb" && (
+        <CarbKcalSharePanel share={carbKcalShare(totals, pet.species)} lang={lang} species={pet.species} />
       )}
 
       {/* Footer nav */}

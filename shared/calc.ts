@@ -443,3 +443,69 @@ export function nutrientProfile(
     return { ...entry, total, perKgDM, per1000kcal };
   });
 }
+
+// ============================================================================
+// Carbohydrate kcal share (Wizard carb step gate)
+// ============================================================================
+//
+// AAFCO does not set a carbohydrate minimum, so GUGA uses kcal-share thresholds
+// based on the user's clinical preference. % of total kcal coming from carbs is
+// computed via Atwater (4 kcal / g carb) and classified per species/stage.
+//
+//   Dog: optimal 20–30%, ok 30–40%, alert <20% or >40%
+//   Cat: optimal <10%,    ok 10–20%, alert  ≥20%
+//
+// Returned as a record so the UI can show the live % plus the band.
+
+export type CarbKcalStatus = "empty" | "optimal" | "ok" | "alert_low" | "alert_high";
+
+export interface CarbKcalShare {
+  carb_g: number;
+  carb_kcal: number;
+  total_kcal: number;
+  pct: number;          // 0–100
+  status: CarbKcalStatus;
+  optimalMin: number;   // species-specific
+  optimalMax: number;
+  okMin: number;
+  okMax: number;
+}
+
+/**
+ * Compute carbohydrate share of total kcal (Atwater) and classify against the
+ * user's species-specific thresholds.
+ */
+export function carbKcalShare(
+  totals: NutrientTotals,
+  species: Species = "dog",
+): CarbKcalShare {
+  // Per-species bands (see header). For cats the lower bound is open (>=0) so
+  // optimalMin = 0; alert_low is not used.
+  const bands =
+    species === "cat"
+      ? { optimalMin: 0, optimalMax: 10, okMin: 10, okMax: 20 }
+      : { optimalMin: 20, optimalMax: 30, okMin: 30, okMax: 40 };
+
+  const carb_g = totals.carb_g;
+  const carb_kcal = carb_g * 4;
+  const total_kcal = totals.energy_kcal;
+  if (total_kcal <= 0) {
+    return {
+      carb_g, carb_kcal, total_kcal: 0, pct: 0, status: "empty",
+      ...bands,
+    };
+  }
+  const pct = (carb_kcal / total_kcal) * 100;
+  let status: CarbKcalStatus;
+  if (species === "cat") {
+    if (pct <= bands.optimalMax) status = "optimal";
+    else if (pct <= bands.okMax) status = "ok";
+    else status = "alert_high";
+  } else {
+    if (pct < bands.optimalMin) status = "alert_low";
+    else if (pct <= bands.optimalMax) status = "optimal";
+    else if (pct <= bands.okMax) status = "ok";
+    else status = "alert_high";
+  }
+  return { carb_g, carb_kcal, total_kcal, pct, status, ...bands };
+}

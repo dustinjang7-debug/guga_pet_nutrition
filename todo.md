@@ -67,3 +67,28 @@
 - [x] SummaryCard "View full nutrient profile" dialog showing the full grouped table
 - [x] Ca:P ratio helper + display (golden 1.2:1 – 1.4:1, color coded with visual band)
 - [x] Vitest tests (12 new) for caPhosphorusRatio + nutrientProfile (44/44 passing)
+
+## v0.2.3 — UX + carb gate (DONE)
+
+- [x] Carb kcal-share helper: % of total kcal from carbs (carb_g × 4 / kcal × 100)
+- [x] Carb status classifier with user bands:
+      Dog: optimal 20–30%, ok 30–40%, alert <20% or >40%
+      Cat: optimal 0–10%, ok 10–20%, alert ≥20%
+- [x] Wizard carb step shows live kcal-share badge (CarbKcalShareBadge) with status colors
+- [x] AafcoPanel: dropped Status column — whole row colored red/green/orange
+- [x] Removed per-1000-kcal column + ME basis toggle
+- [x] Removed per-1000-kcal column from Full Nutrient Profile dialog
+- [x] Pet Profile card: collapses to one-line summary once filled; Edit chip to reopen
+- [x] SummaryCard: collapses to one-line summary (kcal/g/Ca:P)
+- [x] Recipe Items list now sits side-by-side with picker on xl+
+- [x] Created StartingVolumeStrip + relocated under AafcoPanel
+- [x] Vitest tests for carbKcalShare — 17 tests, total 61/61 passing
+
+## v0.2.4 — Final layout re-arrangement (user spec)
+
+- [ ] Make StartingVolumeStrip collapsible (default collapsed, header chevron to expand)
+- [ ] Make macro-targets section collapsible (default collapsed)
+- [ ] Re-arrange RecipeBuilder: left rail = PetProfile + Summary + RecipeItemsList (stacked, items pushed down when expanded)
+- [ ] Center = IngredientPicker only
+- [ ] Right = AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
+- [ ] Apply row colors to AafcoFixSheet rows (gap from earlier review)

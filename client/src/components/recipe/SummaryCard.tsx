@@ -20,7 +20,7 @@ import {
   type RecipeMacros,
 } from "@shared/calc";
 import type { Species } from "@shared/aafco";
-import { ChevronRight, Table as TableIcon } from "lucide-react";
+import { ChevronRight, ChevronUp, Table as TableIcon } from "lucide-react";
 import { useState } from "react";
 
 export function SummaryCard({
@@ -42,16 +42,49 @@ export function SummaryCard({
   species?: Species;
   isGrowth?: boolean;
   lang: Lang;
+  /** When true, the card collapses to a one-line summary once a recipe has weight. */
+  collapsible?: boolean;
 }) {
   const ratio = totals
     ? caPhosphorusRatio(totals, species, isGrowth)
     : null;
 
+  // Default to expanded; once we have meaningful totals we let the user collapse.
+  const hasContent = macros.totalGrams > 0;
+  const [expanded, setExpanded] = useState<boolean>(true);
+
   return (
     <Card className="p-5 space-y-4">
-      <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
-        {t("summary", lang)}
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
+          {t("summary", lang)}
+        </h2>
+        {hasContent && (
+          <Button variant="ghost" size="sm" onClick={() => setExpanded((x) => !x)} className="h-7 px-2">
+            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            <span className="text-xs">{expanded ? (lang === "zh" ? "收起" : lang === "th" ? "⊥⊦" : "Collapse") : (lang === "zh" ? "展开" : lang === "th" ? "ขยาย" : "Expand")}</span>
+          </Button>
+        )}
+      </div>
+
+      {/* Collapsed: one-line summary */}
+      {hasContent && !expanded && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full text-left rounded-md border border-border/60 bg-secondary/30 hover:bg-secondary/50 px-3 py-2 transition-colors text-sm text-muted-foreground"
+        >
+          <span data-numeric="true" className="text-foreground font-medium">{macros.totalGrams.toFixed(0)}</span> g
+          {" · "}
+          <span data-numeric="true" className="text-foreground font-medium">{macros.totalKcal.toFixed(0)}</span> kcal
+          {" · "}
+          <span data-numeric="true" className="text-foreground">{daily.feedingGrams.toFixed(0)}</span> g/day
+          {ratio && ratio.ratio !== null && (
+            <span className="ml-2">· Ca:P <span data-numeric="true" className="text-foreground">{ratio.ratio.toFixed(2)}</span></span>
+          )}
+        </button>
+      )}
+
+      {expanded && (<>
 
       <div className="grid grid-cols-2 gap-3">
         <Metric label={t("total_grams", lang)} value={`${macros.totalGrams.toFixed(0)} g`} />
@@ -76,6 +109,7 @@ export function SummaryCard({
           <FullProfileButton totals={totals} macros={macros} lang={lang} />
         </>
       )}
+      </>)}
     </Card>
   );
 }
@@ -220,10 +254,10 @@ function FullProfileButton({
           </DialogTitle>
           <DialogDescription>
             {lang === "zh" ?
-              "总值 · 每千克干物质 · 每 1000 千卡能量" :
+              "总值 · 每千克干物质" :
               lang === "th" ?
-              "ค่ารวม · ต่อกิโลกรัมวัตถุแห้ง · ต่อ 1000 กิโลแคลอรี" :
-              "Total · per kg dry matter · per 1000 kcal"}
+              "ค่ารวม · ต่อกิโลกรัมวัตถุแห้ง" :
+              "Total · per kg dry matter"}
           </DialogDescription>
         </DialogHeader>
         <NutrientTable rows={rows} lang={lang} />
@@ -247,7 +281,6 @@ function NutrientTable({ rows, lang }: { rows: NutrientProfileRow[]; lang: Lang 
     nutrient:    lang === "zh" ? "营养素"        : lang === "th" ? "สารอาหาร"     : "Nutrient",
     total:       lang === "zh" ? "总量"          : lang === "th" ? "รวม"           : "Total",
     perKgDM:     lang === "zh" ? "每千克干物质"  : lang === "th" ? "ต่อ kg DM"     : "per kg DM",
-    per1000kcal: lang === "zh" ? "每 1000 千卡"  : lang === "th" ? "ต่อ 1000 kcal" : "per 1000 kcal",
   };
 
   return (
@@ -258,7 +291,6 @@ function NutrientTable({ rows, lang }: { rows: NutrientProfileRow[]; lang: Lang 
             <th className="text-left px-3 py-2">{headers.nutrient}</th>
             <th className="text-right px-3 py-2">{headers.total}</th>
             <th className="text-right px-3 py-2">{headers.perKgDM}</th>
-            <th className="text-right px-3 py-2">{headers.per1000kcal}</th>
           </tr>
         </thead>
         <tbody>
@@ -285,7 +317,7 @@ function GroupRows({
   return (
     <>
       <tr className="bg-secondary/40 sticky">
-        <td colSpan={4} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+        <td colSpan={3} className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
           {title}
         </td>
       </tr>
@@ -300,7 +332,6 @@ function GroupRows({
             </td>
             <td data-numeric="true" className="text-right px-3 py-2 tabular-nums">{fmt(r.total)}</td>
             <td data-numeric="true" className="text-right px-3 py-2 tabular-nums text-muted-foreground">{fmt(r.perKgDM)}</td>
-            <td data-numeric="true" className="text-right px-3 py-2 tabular-nums text-muted-foreground">{fmt(r.per1000kcal)}</td>
           </tr>
         );
       })}

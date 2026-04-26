@@ -9,7 +9,9 @@ import {
   CAT_LIFE_STAGES, DOG_LIFE_STAGES,
   type CatLifeStage, type DogLifeStage, type LifeStageFactor, type Species,
 } from "@shared/aafco";
-import { Cat, Dog } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Cat, ChevronDown, ChevronUp, Dog, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export interface PetProfileState {
   species: Species;
@@ -47,20 +49,80 @@ export function PetProfilePane({
   value,
   onChange,
   lang,
+  collapsible = true,
 }: {
   value: PetProfileState;
   onChange: (v: PetProfileState) => void;
   lang: Lang;
+  /** When true, the card collapses to a one-line summary once profile is filled. */
+  collapsible?: boolean;
 }) {
   const stages = lifeStagesFor(value.species);
   const currentStage = stages.find((s) => s.key === value.lifeStageKey) ?? stages[0];
   const hasRange = currentStage?.min !== undefined && currentStage?.max !== undefined;
 
+  // Profile is considered "complete" once the user has weight + a chosen stage.
+  const isComplete = value.bodyWeightKg > 0 && !!value.lifeStageKey;
+  const [expanded, setExpanded] = useState<boolean>(!collapsible || !isComplete);
+  // Auto-collapse the first time the profile transitions from incomplete → complete.
+  // After that, respect the user's manual toggle.
+  const wasCompleteRef = useRef<boolean>(isComplete);
+  const userToggledRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!collapsible) return;
+    if (userToggledRef.current) return;
+    if (!wasCompleteRef.current && isComplete) {
+      setExpanded(false);
+    }
+    wasCompleteRef.current = isComplete;
+  }, [isComplete, collapsible]);
+  const toggleExpanded = () => {
+    userToggledRef.current = true;
+    setExpanded((x) => !x);
+  };
+
+  // Compact summary shown when collapsed.
+  const summaryLine = (
+    <span className="text-sm text-muted-foreground">
+      {value.species === "dog" ? t("species_dog", lang) : t("species_cat", lang)}
+      {" · "}
+      <span data-numeric="true" className="text-foreground font-medium">{value.bodyWeightKg}</span>
+      {" kg · "}
+      {lifeStageLabel(currentStage, lang)}
+      {" · ×"}
+      <span data-numeric="true" className="text-foreground">{value.factor.toFixed(2)}</span>
+      {value.feedingMode === "weight_loss" && (
+        <span className="ml-2 text-amber-700">· {t("feeding_weight_loss", lang)}</span>
+      )}
+      {value.petName && <span className="ml-2">· {value.petName}</span>}
+    </span>
+  );
+
   return (
     <Card className="p-5 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-lg font-semibold">{t("pet_profile", lang)}</h2>
+        {collapsible && isComplete && (
+          <Button variant="ghost" size="sm" onClick={toggleExpanded} className="h-7 px-2">
+            {expanded ? <ChevronUp className="size-3.5" /> : <Pencil className="size-3.5" />}
+            <span className="text-xs">{expanded ? (lang === "zh" ? "收起" : lang === "th" ? "⊥⊦" : "Collapse") : (lang === "zh" ? "编辑" : lang === "th" ? "แก้ไข" : "Edit")}</span>
+          </Button>
+        )}
       </div>
+
+      {/* Collapsed: one-line summary */}
+      {collapsible && isComplete && !expanded && (
+        <button
+          onClick={() => { userToggledRef.current = true; setExpanded(true); }}
+          className="w-full text-left rounded-md border border-border/60 bg-secondary/30 hover:bg-secondary/50 px-3 py-2 transition-colors"
+        >
+          {summaryLine}
+        </button>
+      )}
+
+      {/* Expanded: full form */}
+      {expanded && (
+      <>
 
       {/* Species toggle */}
       <div className="grid grid-cols-2 gap-2">
@@ -180,6 +242,11 @@ export function PetProfilePane({
           />
         </div>
       </div>
+      </>
+      )}
     </Card>
   );
 }
+
+// Suppress unused imports until used elsewhere
+void ChevronDown;

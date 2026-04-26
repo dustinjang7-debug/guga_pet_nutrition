@@ -22,6 +22,7 @@ import { Save, Loader2 } from "lucide-react";
 
 import { PetProfilePane, defaultPetProfile, type PetProfileState } from "@/components/recipe/PetProfile";
 import { VolumeAndTargets, type MacroTargets } from "@/components/recipe/VolumeAndTargets";
+import { StartingVolumeStrip } from "@/components/recipe/StartingVolumeStrip";
 import { IngredientPicker } from "@/components/recipe/IngredientPicker";
 import { RecipeItemsList } from "@/components/recipe/RecipeItemsList";
 import { AafcoPanel } from "@/components/recipe/AafcoPanel";
@@ -238,11 +239,53 @@ export default function RecipeBuilder() {
           </div>
         </div>
 
-        {/* 3-column layout */}
+        {/* Final layout (v0.2.4):
+             - Left rail (lg:col-span-4):
+                 • PetProfile (collapses to one-line summary once filled)
+                 • Summary (manual collapse)
+                 • RecipeItemsList (the selected ingredients) — always visible; pushed down when above are expanded
+             - Center (lg:col-span-4): IngredientPicker only (sticky)
+             - Right (lg:col-span-4): AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
+        */}
         <div className="grid grid-cols-12 gap-5">
-          {/* Left rail: Pet profile + volume/targets — sticky */}
-          <div className="col-span-12 lg:col-span-3 space-y-4 lg:sticky lg:top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto">
+          {/* Left rail */}
+          <div className="col-span-12 lg:col-span-4 space-y-4">
             <PetProfilePane value={pet} onChange={setPet} lang={lang} />
+            <SummaryCard
+              macros={macros}
+              daily={daily}
+              totals={totals}
+              species={pet.species}
+              isGrowth={isGrowth}
+              lang={lang}
+            />
+            <RecipeItemsList items={items} onChangeGrams={changeGrams} onRemove={removeItem} lang={lang} />
+          </div>
+
+          {/* Center: picker only (sticky on lg+) */}
+          <div className="col-span-12 lg:col-span-4">
+            <div className="lg:sticky lg:top-20">
+              <div className="h-[calc(100vh-6rem)]">
+                <IngredientPicker onPick={addIngredient} lang={lang} />
+              </div>
+            </div>
+          </div>
+
+          {/* Right: AAFCO panel + collapsed StartingVolumeStrip + collapsed Macro Targets */}
+          <div className="col-span-12 lg:col-span-4 space-y-4">
+            <AafcoPanel
+              rows={aafco}
+              lang={lang}
+              basis={basis}
+              setBasis={setBasis}
+              onAutoFix={(k) => setFixForKey(k)}
+            />
+            <StartingVolumeStrip
+              startingVolume={startingVolume}
+              setStartingVolume={setStartingVolume}
+              used={used}
+              lang={lang}
+            />
             <VolumeAndTargets
               startingVolume={startingVolume}
               setStartingVolume={setStartingVolume}
@@ -253,33 +296,9 @@ export default function RecipeBuilder() {
               feedingMode={pet.feedingMode}
               lang={lang}
               currentMacros={macros}
-            />
-            <SummaryCard
-              macros={macros}
-              daily={daily}
-              totals={totals}
-              species={pet.species}
-              isGrowth={isGrowth}
-              lang={lang}
-            />
-          </div>
-
-          {/* Center: ingredient picker + recipe items */}
-          <div className="col-span-12 lg:col-span-5 space-y-4">
-            <div className="h-[600px]">
-              <IngredientPicker onPick={addIngredient} lang={lang} />
-            </div>
-            <RecipeItemsList items={items} onChangeGrams={changeGrams} onRemove={removeItem} lang={lang} />
-          </div>
-
-          {/* Right: AAFCO panel */}
-          <div className="col-span-12 lg:col-span-4">
-            <AafcoPanel
-              rows={aafco}
-              lang={lang}
-              basis={basis}
-              setBasis={setBasis}
-              onAutoFix={(k) => setFixForKey(k)}
+              showStartingVolume={false}
+              collapsibleTargets
+              defaultCollapsed
             />
           </div>
           <AafcoFixSheet

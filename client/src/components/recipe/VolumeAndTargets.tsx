@@ -1,8 +1,11 @@
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type Lang, t } from "@/lib/i18n";
 import { MACRO_BENCHMARKS, type Species } from "@shared/aafco";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 
 export interface MacroTargets {
   proteinPct: number;
@@ -19,6 +22,9 @@ export function VolumeAndTargets({
   feedingMode,
   lang,
   currentMacros,
+  showStartingVolume = true,
+  collapsibleTargets = false,
+  defaultCollapsed = false,
 }: {
   startingVolume: number;
   setStartingVolume: (v: number) => void;
@@ -29,7 +35,14 @@ export function VolumeAndTargets({
   feedingMode: "normal" | "weight_loss";
   lang: Lang;
   currentMacros: { proteinPct_DM: number; fatPct_DM: number; carbPct_DM: number };
+  /** When false, the starting-volume block is hidden so it can be rendered elsewhere (e.g. under the AAFCO panel). */
+  showStartingVolume?: boolean;
+  /** When true, render the macro-targets section as a collapsible block. */
+  collapsibleTargets?: boolean;
+  /** Initial collapsed state when collapsibleTargets is true. */
+  defaultCollapsed?: boolean;
 }) {
+  const [targetsExpanded, setTargetsExpanded] = useState<boolean>(!defaultCollapsed);
   const remaining = startingVolume - used;
   const percentUsed = startingVolume > 0 ? Math.min((used / startingVolume) * 100, 100) : 0;
   const overflow = used > startingVolume;
@@ -67,7 +80,8 @@ export function VolumeAndTargets({
 
   return (
     <Card className="p-5 space-y-5">
-      {/* Volume tracker */}
+      {showStartingVolume && (
+      /* Volume tracker */
       <div>
         <div className="flex items-end justify-between mb-2">
           <Label className="text-xs text-muted-foreground">{t("starting_volume", lang)}</Label>
@@ -101,10 +115,31 @@ export function VolumeAndTargets({
           </span>
         </div>
       </div>
+      )}
 
       {/* Target macros */}
-      <div className="pt-3 border-t border-border/60">
-        <div className="text-xs text-muted-foreground mb-3">{t("target_macros", lang)}</div>
+      <div className={`${showStartingVolume ? "pt-3 border-t border-border/60" : ""}`}>
+        {collapsibleTargets ? (
+          <button
+            onClick={() => setTargetsExpanded((x) => !x)}
+            className="w-full flex items-center justify-between mb-3 text-left"
+          >
+            <div className="text-xs text-muted-foreground">{t("target_macros", lang)}</div>
+            <div className="flex items-center gap-2">
+              {!targetsExpanded && (
+                <span data-numeric="true" className="text-[11px] text-muted-foreground">
+                  P {currentMacros.proteinPct_DM.toFixed(0)}% · C {currentMacros.carbPct_DM.toFixed(0)}% · F {currentMacros.fatPct_DM.toFixed(0)}%
+                </span>
+              )}
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                {targetsExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+              </Button>
+            </div>
+          </button>
+        ) : (
+          <div className="text-xs text-muted-foreground mb-3">{t("target_macros", lang)}</div>
+        )}
+        {(!collapsibleTargets || targetsExpanded) && (
         <div className="grid grid-cols-3 gap-2">
           <MacroBox
             label={t("target_protein", lang)}
@@ -135,6 +170,7 @@ export function VolumeAndTargets({
             </div>
           </div>
         </div>
+        )}
       </div>
     </Card>
   );

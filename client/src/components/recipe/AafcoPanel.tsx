@@ -5,25 +5,37 @@ import {
 import { type Lang, t } from "@/lib/i18n";
 import type { AafcoRow } from "@shared/calc";
 
-function statusClass(s: AafcoRow["status"]) {
+/**
+ * Row-level background tint mapped to AAFCO status.
+ *
+ * Per user request:
+ *   below      -> red    (insufficient)
+ *   borderline -> red    (also insufficient — need more)
+ *   ok         -> green  (within band)
+ *   above      -> orange (exceeds AAFCO max)
+ *   no_target  -> neutral
+ *
+ * Tints are kept faint so the row text stays readable.
+ */
+function rowClass(s: AafcoRow["status"]): string {
   switch (s) {
-    case "below":      return "text-[var(--status-below)] bg-[var(--status-below)]/10";
-    case "borderline": return "text-[var(--status-borderline)] bg-[var(--status-borderline)]/15";
-    case "ok":         return "text-[var(--status-ok)] bg-[var(--status-ok)]/10";
-    case "above":      return "text-[var(--status-above)] bg-[var(--status-above)]/10";
-    case "no_target":  return "text-muted-foreground bg-muted/40";
+    case "below":      return "bg-red-50/80 hover:bg-red-100/80";
+    case "borderline": return "bg-red-50/60 hover:bg-red-100/60";
+    case "ok":         return "bg-emerald-50/80 hover:bg-emerald-100/80";
+    case "above":      return "bg-orange-50/80 hover:bg-orange-100/80";
+    case "no_target":  return "hover:bg-secondary/20";
   }
 }
 
-function statusLabel(s: AafcoRow["status"], lang: Lang) {
-  const map = {
-    below: t("status_below", lang),
-    borderline: t("status_borderline", lang),
-    ok: t("status_ok", lang),
-    above: t("status_above", lang),
-    no_target: t("status_no_target", lang),
-  };
-  return map[s];
+/** Coloured left edge (4px) so colour-blind users can see status at a glance. */
+function rowAccent(s: AafcoRow["status"]): string {
+  switch (s) {
+    case "below":      return "border-l-4 border-l-red-400";
+    case "borderline": return "border-l-4 border-l-red-300";
+    case "ok":         return "border-l-4 border-l-emerald-400";
+    case "above":      return "border-l-4 border-l-orange-400";
+    case "no_target":  return "border-l-4 border-l-transparent";
+  }
 }
 
 function nutrientLabel(row: AafcoRow, lang: Lang) {
@@ -43,15 +55,16 @@ function fmt(n: number, unit: string): string {
 export function AafcoPanel({
   rows,
   lang,
-  basis,
-  setBasis,
+  basis: _basis,
+  setBasis: _setBasis,
   onAutoFix,
 }: {
   rows: AafcoRow[];
   lang: Lang;
-  basis: "dm" | "me";
-  setBasis: (b: "dm" | "me") => void;
-  /** Optional: when supplied, a small "Fix" link is rendered next to each below/borderline row, surfacing the gap suggester. */
+  /** Kept for API compatibility; per-1000-kcal toggle removed (always shows per-kg DM). */
+  basis?: "dm" | "me";
+  setBasis?: (b: "dm" | "me") => void;
+  /** Optional: when supplied, a small "Fix" link is rendered next to each below/borderline row. */
   onAutoFix?: (nutrientKey: string) => void;
 }) {
   const counts = rows.reduce(
@@ -64,43 +77,14 @@ export function AafcoPanel({
 
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between gap-3">
+      <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between gap-3 flex-wrap">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
           {t("aafco_panel", lang)}
         </h2>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="flex items-center gap-1">
-              <span className="size-2 rounded-full bg-[var(--status-ok)]" />
-              <span data-numeric="true" className="text-muted-foreground">{counts.ok}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="size-2 rounded-full bg-[var(--status-borderline)]" />
-              <span data-numeric="true" className="text-muted-foreground">{counts.borderline}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="size-2 rounded-full bg-[var(--status-below)]" />
-              <span data-numeric="true" className="text-muted-foreground">{counts.below}</span>
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="size-2 rounded-full bg-[var(--status-above)]" />
-              <span data-numeric="true" className="text-muted-foreground">{counts.above}</span>
-            </span>
-          </div>
-          <div className="flex border border-border rounded-md overflow-hidden text-[11px]">
-            <button
-              onClick={() => setBasis("dm")}
-              className={`px-2 py-1 ${basis === "dm" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
-            >
-              {t("per_kg_dm", lang)}
-            </button>
-            <button
-              onClick={() => setBasis("me")}
-              className={`px-2 py-1 border-l border-border ${basis === "me" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
-            >
-              {t("per_1000_kcal", lang)}
-            </button>
-          </div>
+        <div className="flex items-center gap-3 text-[11px]">
+          <Legend dotClass="bg-emerald-400" label={lang === "zh" ? "达标" : lang === "th" ? "ผ่าน" : "Met"}      count={counts.ok} />
+          <Legend dotClass="bg-red-400"     label={lang === "zh" ? "不足" : lang === "th" ? "ขาด"  : "Below"}    count={counts.below + counts.borderline} />
+          <Legend dotClass="bg-orange-400"  label={lang === "zh" ? "超标" : lang === "th" ? "เกิน" : "Over max"} count={counts.above} />
         </div>
       </div>
 
@@ -110,34 +94,50 @@ export function AafcoPanel({
             <tr>
               <th className="text-left font-medium px-5 py-2">{t("nutrient", lang)}</th>
               <th className="text-right font-medium px-3 py-2 hidden sm:table-cell">
-                {basis === "dm" ? t("per_kg_dm", lang) : t("per_1000_kcal", lang)}
+                {t("per_kg_dm", lang)}
               </th>
               <th className="text-right font-medium px-3 py-2 hidden sm:table-cell">{t("aafco_min", lang)}</th>
               <th className="text-right font-medium px-3 py-2 hidden md:table-cell">{t("aafco_max", lang)}</th>
-              <th className="text-right font-medium px-5 py-2">{t("status", lang)}</th>
+              {onAutoFix && <th className="text-right font-medium px-5 py-2 w-12">&nbsp;</th>}
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => {
-              const value = basis === "dm" ? row.perKgDM : row.per1000kcal;
+              const value = row.perKgDM;
               return (
-                <tr key={row.nutrient.key} className="border-t border-border/40 hover:bg-secondary/20">
+                <tr
+                  key={row.nutrient.key}
+                  className={`border-t border-border/40 transition-colors ${rowAccent(row.status)} ${rowClass(row.status)}`}
+                >
                   <td className="px-5 py-2">
                     <div className="font-medium">{nutrientLabel(row, lang)}</div>
                     <div data-numeric="true" className="text-[10px] text-muted-foreground">{row.nutrient.unit}</div>
                   </td>
-                  <td data-numeric="true" className="text-right px-3 py-2 hidden sm:table-cell">
-                    {fmt(value, row.nutrient.unit)}
+                  <td data-numeric="true" className="text-right px-3 py-2 hidden sm:table-cell tabular-nums">
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>{fmt(value, row.nutrient.unit)}</span>
+                        </TooltipTrigger>
+                        {row.delta !== 0 && (
+                          <TooltipContent>
+                            <span data-numeric="true" className="text-xs">
+                              Δ {fmt(row.delta, row.nutrient.unit)} {row.nutrient.unit}
+                            </span>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                   </td>
-                  <td data-numeric="true" className="text-right px-3 py-2 text-muted-foreground hidden sm:table-cell">
+                  <td data-numeric="true" className="text-right px-3 py-2 text-muted-foreground hidden sm:table-cell tabular-nums">
                     {row.min !== null ? fmt(row.min, row.nutrient.unit) : "—"}
                   </td>
-                  <td data-numeric="true" className="text-right px-3 py-2 text-muted-foreground hidden md:table-cell">
+                  <td data-numeric="true" className="text-right px-3 py-2 text-muted-foreground hidden md:table-cell tabular-nums">
                     {row.max !== null ? fmt(row.max, row.nutrient.unit) : "—"}
                   </td>
-                  <td className="text-right px-5 py-2">
-                    <div className="inline-flex items-center gap-1.5">
-                      {onAutoFix && (row.status === "below" || row.status === "borderline") && (
+                  {onAutoFix && (
+                    <td className="text-right px-5 py-2 w-12">
+                      {(row.status === "below" || row.status === "borderline" || row.status === "above") && (
                         <button
                           onClick={() => onAutoFix(row.nutrient.key)}
                           className="text-[10px] font-medium text-primary hover:underline"
@@ -146,24 +146,8 @@ export function AafcoPanel({
                           {lang === "zh" ? "修复" : lang === "th" ? "เสริม" : "Fix"}
                         </button>
                       )}
-                      <TooltipProvider delayDuration={200}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] uppercase font-medium ${statusClass(row.status)}`}>
-                              {statusLabel(row.status, lang)}
-                            </span>
-                          </TooltipTrigger>
-                          {row.delta !== 0 && (
-                            <TooltipContent>
-                              <span data-numeric="true" className="text-xs">
-                                Δ {fmt(row.delta, row.nutrient.unit)} {row.nutrient.unit}
-                              </span>
-                            </TooltipContent>
-                          )}
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </td>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -171,5 +155,15 @@ export function AafcoPanel({
         </table>
       </div>
     </Card>
+  );
+}
+
+function Legend({ dotClass, label, count }: { dotClass: string; label: string; count: number }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span className={`size-2 rounded-full ${dotClass}`} />
+      <span data-numeric="true" className="text-muted-foreground">{count}</span>
+      <span className="text-muted-foreground hidden sm:inline">{label}</span>
+    </span>
   );
 }
