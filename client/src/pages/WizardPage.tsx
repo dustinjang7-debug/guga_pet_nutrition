@@ -31,7 +31,7 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Check, ChevronRight, FlaskConical, Leaf,
-  ListChecks, Loader2, Save, Sparkles, X,
+  ListChecks, Loader2, Save, Search, Sparkles, X,
 } from "lucide-react";
 
 import {
@@ -163,7 +163,30 @@ export default function WizardPage() {
   }
 
   // ----- Item helpers --------------------------------------------------------
-  function addOrUpdateItem(ingredientId: number, grams: number) {
+  /**
+   * Upsert (set) the grams for an ingredient: if it already exists, REPLACE
+   * its grams; otherwise insert. Used by the Wizard suggestion card so
+   * clicking "Add to recipe" twice doesn't silently double the amount.
+   */
+  function upsertItem(ingredientId: number, grams: number) {
+    setItems((prev) => {
+      const idx = prev.findIndex((p) => p.ingredientId === ingredientId);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ingredientId, grams };
+        return next;
+      }
+      return [...prev, { ingredientId, grams }];
+    });
+  }
+
+  /**
+   * Increment grams for an ingredient: if it exists, ADD the new grams to its
+   * current value; otherwise insert at the new amount. Used by the Compliance
+   * Check “Add” action where the user explicitly wants to top up an
+   * already-present ingredient (e.g. add another 5 g of eggshell powder).
+   */
+  function incrementItem(ingredientId: number, grams: number) {
     setItems((prev) => {
       const idx = prev.findIndex((p) => p.ingredientId === ingredientId);
       if (idx >= 0) {
@@ -247,7 +270,7 @@ export default function WizardPage() {
                 items={items}
                 aafco={aafco}
                 startingVolume={startingVolume}
-                onAdd={addOrUpdateItem}
+                onAdd={upsertItem}
                 onSetGrams={setItemGrams}
                 onSkip={nextStep}
                 onBack={prevStep}
@@ -258,7 +281,7 @@ export default function WizardPage() {
                 aafco={aafco}
                 items={items}
                 totalDM_g={macros.totalDryMatter_g}
-                onAdd={addOrUpdateItem}
+                onAdd={incrementItem}
                 onBack={prevStep}
                 onFinish={() => setSaveOpen(true)}
                 onGoToSimple={() =>
@@ -402,6 +425,10 @@ function NutrientStepCard({
 
   const inRecipe = items.find((i) => i.ingredientId === pickedId);
 
+  // Free-text search across ALL 238 ingredients (overrides the curated top-30
+  // list when a query is entered, so users can pick anything by exact name).
+  const [search, setSearch] = useState("");
+
   // Build alternative ingredient list (DB sorted by step's nutrient + step's allowedCategories)
   const alternatives = useMemo(() => {
     const baseIds = new Set([
@@ -433,6 +460,30 @@ function NutrientStepCard({
     });
     return result;
   }, [step.id]);
+
+  // When the user types into the search box, switch to a free-pick list of
+  // every ingredient whose EN/ZH/TH name (or category) contains the query.
+  const searchResults = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return null;
+    const filtered = INGREDIENTS.filter((i) => {
+      return (
+        i.name_en.toLowerCase().includes(q) ||
+        i.name_zh.toLowerCase().includes(q) ||
+        i.name_th.toLowerCase().includes(q) ||
+        i.category.toLowerCase().includes(q)
+      );
+    });
+    // Still rank matches by the step's nutrient density when relevant.
+    if (step.nutrientKey) {
+      const k = step.nutrientKey as keyof Ingredient;
+      filtered.sort((a, b) => ((b[k] as number) ?? 0) - ((a[k] as number) ?? 0));
+    }
+    return filtered.slice(0, 100);
+  }, [search, step.nutrientKey]);
+
+  // Whichever list we render: free-text search if any, otherwise the curated top-30.
+  const visibleList = searchResults ?? alternatives;
 
   const titleByLang =
     lang === "zh" ? step.title_zh : lang === "th" ? step.title_th : step.title_en;
@@ -514,24 +565,54 @@ function NutrientStepCard({
         </div>
       )}
 
-      {/* Alternatives — sortable shortlist */}
+      {/* Alternatives — sortable shortlist + free search */}
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-2">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-            {lang === "zh" ? "其他选择" : lang === "th" ? "ตัวเลือกอื่น" : "Other options"}
-            {step.nutrientKey && (
+            {searchResults
+              ? (lang === "zh" ? "搜索结果" : lang === "th" ? "ผลการค้นหา" : "Search results")
+              : (lang === "zh" ? "其他选择" : lang === "th" ? "ตัวเลือกอื่น" : "Other options")}
+            {step.nutrientKey && !searchResults && (
               <span className="text-muted-foreground/70 normal-case ml-2 lowercase">
                 · {lang === "zh" ? "按密度排序" : lang === "th" ? "เรียงตามความเข้มข้น" : "ranked by density"}
               </span>
             )}
           </div>
           <div className="text-xs text-muted-foreground">
-            {alternatives.length} {lang === "zh" ? "项" : lang === "th" ? "รายการ" : "items"}
+            {visibleList.length} {lang === "zh" ? "项" : lang === "th" ? "รายการ" : "items"}
           </div>
+        </div>
+        <div className="relative mb-2">
+          <Search className="size-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={
+              lang === "zh" ? "搜索所有 238 种食材 (中文 / 英文 / 泰文)" :
+                lang === "th" ? "ค้นหาวัตถุดิบทั้ง 238 รายการ" :
+                "Search any of 238 ingredients (EN / 中文 / ไทย)"
+            }
+            className="h-8 pl-8 pr-8 text-sm"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
         <ScrollArea className="h-[260px] rounded-md border border-border">
           <div className="divide-y divide-border">
-            {alternatives.map((ing) => {
+            {visibleList.length === 0 && (
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                {lang === "zh" ? "未找到匹配项" : lang === "th" ? "ไม่พบรายการที่ตรง" : "No matching ingredient"}
+              </div>
+            )}
+            {visibleList.map((ing) => {
               const v = step.nutrientKey
                 ? ((ing[step.nutrientKey as keyof Ingredient] as number) ?? 0)
                 : (ing.protein_g ?? 0);
