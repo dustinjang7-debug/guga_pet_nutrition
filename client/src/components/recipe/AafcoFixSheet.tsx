@@ -70,10 +70,39 @@ export function AafcoFixSheet({
 
         {!gap ? (
           <div className="text-sm text-muted-foreground italic mt-6">
-            {lang === "zh" ? "已达标,无需修复。" : lang === "th" ? "ครบถ้วนแล้ว ไม่ต้องเสริม" : "Already meets the AAFCO target."}
+            {lang === "zh" ? "已达标，无需修复。" : lang === "th" ? "ครบถ้วนแล้ว ไม่ต้องเสริม" : "Already meets the AAFCO target."}
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-4 mt-4 pr-1">
+            {/* Status band: same red/green/orange semantics as AafcoPanel rows */}
+            <div
+              className={`rounded-md border px-3 py-2 text-xs ${
+                gap.row.status === "below"
+                  ? "bg-red-50 border-red-200 text-red-900"
+                  : gap.row.status === "above"
+                    ? "bg-orange-50 border-orange-200 text-orange-900"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-900"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="uppercase tracking-wider text-[10px] font-semibold">
+                  {gap.row.status === "below"
+                    ? lang === "zh" ? "低于最低需求" : lang === "th" ? "ต่ำกว่าขั้นต่ำ" : "Below minimum"
+                    : gap.row.status === "above"
+                      ? lang === "zh" ? "超过上限" : lang === "th" ? "เกินค่าสูงสุด" : "Above maximum"
+                      : lang === "zh" ? "达标" : lang === "th" ? "ครบ" : "Within range"}
+                </span>
+                <span data-numeric="true" className="font-semibold">
+                  {gap.row.perKgDM.toFixed(2)} {gap.row.nutrient.unit}
+                  {gap.row.min !== null && (
+                    <span className="opacity-70 font-normal"> / min {gap.row.min}</span>
+                  )}
+                  {gap.row.max !== null && (
+                    <span className="opacity-70 font-normal"> / max {gap.row.max}</span>
+                  )}
+                </span>
+              </div>
+            </div>
             <div className="flex items-center gap-1 border border-border rounded-md p-0.5 w-fit text-xs">
               <button
                 onClick={() => setMode("additive")}
@@ -96,7 +125,15 @@ export function AafcoFixSheet({
             </div>
 
             {mode === "additive" && gap.additive && (
-              <Card className="p-3 flex items-center justify-between gap-3">
+              <Card
+                className={`p-3 flex items-center justify-between gap-3 border-l-4 ${
+                  gap.row.status === "below"
+                    ? "bg-red-50/40 border-l-red-400"
+                    : gap.row.status === "above"
+                      ? "bg-orange-50/40 border-l-orange-400"
+                      : "bg-emerald-50/40 border-l-emerald-400"
+                }`}
+              >
                 <div className="flex-1 min-w-0">
                   <div className="font-medium">{ingredientName(gap.additive.ingredient, lang)}</div>
                   <div className="text-xs text-muted-foreground">
@@ -147,7 +184,13 @@ export function AafcoFixSheet({
                 {gap.fresh.map((s) => (
                   <Card
                     key={s.ingredient.id}
-                    className="p-2.5 flex items-center justify-between gap-2"
+                    className={`p-2.5 flex items-center justify-between gap-2 border-l-4 ${
+                      gap.row.status === "below"
+                        ? "bg-red-50/40 border-l-red-400"
+                        : gap.row.status === "above"
+                          ? "bg-orange-50/40 border-l-orange-400"
+                          : "bg-emerald-50/40 border-l-emerald-400"
+                    }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm">{ingredientName(s.ingredient, lang)}</div>

@@ -21,7 +21,7 @@ import {
 } from "@shared/calc";
 import type { Species } from "@shared/aafco";
 import { ChevronRight, ChevronUp, Table as TableIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function SummaryCard({
   macros,
@@ -49,9 +49,16 @@ export function SummaryCard({
     ? caPhosphorusRatio(totals, species, isGrowth)
     : null;
 
-  // Default to expanded; once we have meaningful totals we let the user collapse.
+  // Auto-collapse once a meaningful recipe exists; user can re-expand by clicking.
   const hasContent = macros.totalGrams > 0;
   const [expanded, setExpanded] = useState<boolean>(true);
+  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  useEffect(() => {
+    if (hasContent && !autoCollapsed) {
+      setExpanded(false);
+      setAutoCollapsed(true);
+    }
+  }, [hasContent, autoCollapsed]);
 
   return (
     <Card className="p-5 space-y-4">

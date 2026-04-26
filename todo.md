@@ -84,11 +84,11 @@
 - [x] Created StartingVolumeStrip + relocated under AafcoPanel
 - [x] Vitest tests for carbKcalShare — 17 tests, total 61/61 passing
 
-## v0.2.4 — Final layout re-arrangement (user spec)
+## v0.2.4 — Final layout re-arrangement (DONE)
 
-- [ ] Make StartingVolumeStrip collapsible (default collapsed, header chevron to expand)
-- [ ] Make macro-targets section collapsible (default collapsed)
-- [ ] Re-arrange RecipeBuilder: left rail = PetProfile + Summary + RecipeItemsList (stacked, items pushed down when expanded)
-- [ ] Center = IngredientPicker only
-- [ ] Right = AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
-- [ ] Apply row colors to AafcoFixSheet rows (gap from earlier review)
+- [x] StartingVolumeStrip collapsible (default collapsed, header chevron, progress bar always visible)
+- [x] Macro-targets section collapsible (default collapsed) with one-line P/C/F summary
+- [x] Re-arrange RecipeBuilder: left rail = PetProfile + Summary + RecipeItemsList (stacked)
+- [x] Center = IngredientPicker only (sticky, full viewport height)
+- [x] Right = AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
+- [x] Status band (red/green/orange) added to AafcoFixSheet header
