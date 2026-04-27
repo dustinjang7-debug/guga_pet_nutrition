@@ -49,7 +49,7 @@ describe("Hand-calc audit (post v0.2.6 unit fix)", () => {
       { ingredientId: chicken.id, grams: 400 },
       { ingredientId: eggshell.id, grams: 6 },
     ];
-    for (const key of ["calcium_mg", "phosphorus_mg", "sodium_mg", "vit_b12_ug", "iron_mg", "zinc_mg"] as const) {
+    for (const key of ["calcium_mg", "phosphorus_mg", "sodium_mg", "vit_b12_mg", "iron_mg", "zinc_mg"] as const) {
       const hc = handCalc(items, key);
       const r = row(items, key);
       expect(r.totalInRecipe, `total mismatch on ${key}`).toBeCloseTo(hc.total, 2);
@@ -73,7 +73,7 @@ describe("Hand-calc audit (post v0.2.6 unit fix)", () => {
       { ingredientId: oyster.id, grams: 30 },
       { ingredientId: eggshell.id, grams: 6 },
     ];
-    for (const key of ["calcium_mg", "phosphorus_mg", "sodium_mg", "vit_b12_ug", "iron_mg", "zinc_mg", "protein_g", "fat_g"] as const) {
+    for (const key of ["calcium_mg", "phosphorus_mg", "sodium_mg", "vit_b12_mg", "iron_mg", "zinc_mg", "protein_g", "fat_g"] as const) {
       const hc = handCalc(items, key);
       const r = row(items, key);
       expect(r.totalInRecipe, `total mismatch on ${key}`).toBeCloseTo(hc.total, 2);
@@ -84,7 +84,7 @@ describe("Hand-calc audit (post v0.2.6 unit fix)", () => {
     // due to source-data rounding. Per product decision, the DB is the source of
     // truth; recipes that fall short of B12 are expected to add brewer's yeast or
     // a B-complex supplement. Here we only assert that B12 is computed (>= 0).
-    const b12 = row(items, "vit_b12_ug");
+    const b12 = row(items, "vit_b12_mg");
     expect(b12.perKgDM).toBeGreaterThanOrEqual(0);
     // Phosphorus from chicken + liver + oyster + eggshell should be above min (4000 mg/kg DM)
     const p = row(items, "phosphorus_mg");

@@ -1486,7 +1486,7 @@ function nutrientLabelByKey(key: string, lang: "en" | "zh" | "th"): string {
     niacin_mg: ["Niacin (B3)", "维生素B3", "วิตามินบี3"],
     vit_b5_mg: ["Pantothenic (B5)", "维生素B5", "วิตามินบี5"],
     vit_b6_mg: ["Pyridoxine (B6)", "维生素B6", "วิตามินบี6"],
-    vit_b12_ug: ["Vitamin B12", "维生素B12", "วิตามินบี12"],
+    vit_b12_mg: ["Vitamin B12", "维生素B12", "วิตามินบี12"],
     folate_mg: ["Folate", "叶酸", "โฟเลต"],
     choline_mg: ["Choline", "胆碱", "โคลีน"],
   };

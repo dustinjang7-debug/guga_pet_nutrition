@@ -269,7 +269,7 @@ export const AAFCO_DOG: AafcoNutrient[] = [
   { key: "niacin_mg",       label_en: "Niacin (B3)",     label_zh: "维生素B3",   label_th: "วิตามินบี3",      unit: "mg/kg DM", adultMin: 13.6,      growthMin: 13.6,      max: null },
   { key: "vit_b6_mg",       label_en: "Pyridoxine (B6)", label_zh: "维生素B6",   label_th: "วิตามินบี6",      unit: "mg/kg DM", adultMin: 1.5,       growthMin: 1.5,       max: null },
   { key: "folate_mg",       label_en: "Folic acid",      label_zh: "叶酸",       label_th: "โฟเลต",           unit: "mg/kg DM", adultMin: 0.216,     growthMin: 0.216,     max: null },
-  { key: "vit_b12_ug",      label_en: "Vitamin B12",     label_zh: "维生素B12",  label_th: "วิตามินบี12",     unit: "μg/kg DM", adultMin: 28,        growthMin: 28,        max: null },
+  { key: "vit_b12_mg",      label_en: "Vitamin B12",     label_zh: "维生素B12",  label_th: "วิตามินบี12",     unit: "mg/kg DM", adultMin: 0.028,     growthMin: 0.028,     max: null },
   { key: "choline_mg",      label_en: "Choline",         label_zh: "胆碱",       label_th: "โคลีน",           unit: "mg/kg DM", adultMin: 1360,      growthMin: 1360,      max: null },
 ];
 
@@ -295,7 +295,7 @@ export const AAFCO_CAT: AafcoNutrient[] = [
   { key: "niacin_mg",       label_en: "Niacin (B3)",     label_zh: "维生素B3",   label_th: "วิตามินบี3",      unit: "mg/kg DM", adultMin: 60,        growthMin: 60,        max: null },
   { key: "vit_b6_mg",       label_en: "Pyridoxine (B6)", label_zh: "维生素B6",   label_th: "วิตามินบี6",      unit: "mg/kg DM", adultMin: 4.0,       growthMin: 4.0,       max: null },
   { key: "folate_mg",       label_en: "Folic acid",      label_zh: "叶酸",       label_th: "โฟเลต",           unit: "mg/kg DM", adultMin: 0.8,       growthMin: 0.8,       max: null },
-  { key: "vit_b12_ug",      label_en: "Vitamin B12",     label_zh: "维生素B12",  label_th: "วิตามินบี12",     unit: "μg/kg DM", adultMin: 20,        growthMin: 20,        max: null },
+  { key: "vit_b12_mg",      label_en: "Vitamin B12",     label_zh: "维生素B12",  label_th: "วิตามินบี12",     unit: "mg/kg DM", adultMin: 0.020,     growthMin: 0.020,     max: null },
   { key: "choline_mg",      label_en: "Choline",         label_zh: "胆碱",       label_th: "โคลีน",           unit: "mg/kg DM", adultMin: 2400,      growthMin: 2400,      max: null },
 ];
 

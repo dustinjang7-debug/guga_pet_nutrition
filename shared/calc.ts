@@ -42,7 +42,7 @@ export interface NutrientTotals {
   vit_b5_mg: number;
   vit_b6_mg: number;
   folate_mg: number;
-  vit_b12_ug: number;
+  vit_b12_mg: number;
   choline_mg: number;
   vit_c_mg: number;
   vit_d_ug: number;
@@ -62,7 +62,7 @@ export interface NutrientTotals {
 const NUTRIENT_KEYS: (keyof NutrientTotals)[] = [
   "water_g", "energy_kcal", "protein_g", "fat_g", "carb_g", "fiber_g",
   "cholesterol_mg", "vit_a_re_ug", "vit_b1_mg", "vit_b2_mg", "niacin_mg",
-  "vit_b5_mg", "vit_b6_mg", "folate_mg", "vit_b12_ug", "choline_mg",
+  "vit_b5_mg", "vit_b6_mg", "folate_mg", "vit_b12_mg", "choline_mg",
   "vit_c_mg", "vit_d_ug", "vit_e_mg", "calcium_mg", "phosphorus_mg",
   "potassium_mg", "sodium_mg", "magnesium_mg", "iron_mg", "zinc_mg",
   "selenium_ug", "copper_mg", "manganese_mg",
@@ -397,7 +397,7 @@ export const NUTRIENT_CATALOG: NutrientCatalogEntry[] = [
   { key: "vit_b5_mg",       label_en: "Vitamin B5",     label_zh: "维生素B5",   label_th: "วิตามินบี5",    unit: "mg",  group: "vitamin" },
   { key: "vit_b6_mg",       label_en: "Vitamin B6",     label_zh: "维生素B6",   label_th: "วิตามินบี6",    unit: "mg",  group: "vitamin" },
   { key: "folate_mg",       label_en: "Folate (B9)",    label_zh: "叶酸 B9",    label_th: "โฟเลต บี9",     unit: "mg",  group: "vitamin" },
-  { key: "vit_b12_ug",      label_en: "Vitamin B12",    label_zh: "维生素B12",  label_th: "วิตามินบี12",   unit: "ug",  group: "vitamin" },
+  { key: "vit_b12_mg",      label_en: "Vitamin B12",    label_zh: "维生素B12",  label_th: "วิตามินบี12",   unit: "ug",  group: "vitamin" },
   { key: "choline_mg",      label_en: "Choline",        label_zh: "胆碱",       label_th: "โคลีน",         unit: "mg",  group: "vitamin" },
   { key: "vit_c_mg",        label_en: "Vitamin C",      label_zh: "维生素C",    label_th: "วิตามินซี",     unit: "mg",  group: "vitamin" },
   { key: "vit_d_ug",        label_en: "Vitamin D",      label_zh: "维生素D",    label_th: "วิตามินดี",     unit: "ug",  group: "vitamin" },

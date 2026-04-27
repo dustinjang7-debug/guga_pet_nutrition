@@ -72,13 +72,13 @@ describe("FULL audit of user's 8-ingredient recipe (50g rice variant)", () => {
     summary.push("");
     summary.push("--- B12 forensic ---");
     summary.push(
-      `Chicken liver DB B12  : ${INGREDIENT_BY_ID[find("Chicken liver").id].vit_b12_ug} μg/100g  (USDA: 16.6)`
+      `Chicken liver DB B12  : ${INGREDIENT_BY_ID[find("Chicken liver").id].vit_b12_mg} μg/100g  (USDA: 16.6)`
     );
     summary.push(
-      `Raw oyster   DB B12   : ${INGREDIENT_BY_ID[find("Raw oyster").id].vit_b12_ug} μg/100g  (USDA: 16.0)`
+      `Raw oyster   DB B12   : ${INGREDIENT_BY_ID[find("Raw oyster").id].vit_b12_mg} μg/100g  (USDA: 16.0)`
     );
     summary.push(
-      `Egg yolk     DB B12   : ${INGREDIENT_BY_ID[find("Egg yolk").id].vit_b12_ug} μg/100g  (USDA: 1.95)`
+      `Egg yolk     DB B12   : ${INGREDIENT_BY_ID[find("Egg yolk").id].vit_b12_mg} μg/100g  (USDA: 1.95)`
     );
     summary.push(`If DB used USDA values:`);
     const usda_b12 =

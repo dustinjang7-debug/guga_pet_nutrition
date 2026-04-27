@@ -23,7 +23,7 @@ const SORTABLE_NUTRIENTS: { key: keyof Ingredient | "name"; label_en: string; la
   { key: "vit_b5_mg", label_en: "Vit B5", label_zh: "维生素B5", label_th: "วิตามินบี5", unit: "mg" },
   { key: "vit_b6_mg", label_en: "Vit B6", label_zh: "维生素B6", label_th: "วิตามินบี6", unit: "mg" },
   { key: "folate_mg", label_en: "Folate", label_zh: "叶酸", label_th: "โฟเลต", unit: "mg" },
-  { key: "vit_b12_ug", label_en: "Vit B12", label_zh: "维生素B12", label_th: "วิตามินบี12", unit: "μg" },
+  { key: "vit_b12_mg", label_en: "Vit B12", label_zh: "维生素B12", label_th: "วิตามินบี12", unit: "μg" },
   { key: "choline_mg", label_en: "Choline", label_zh: "胆碱", label_th: "โคลีน", unit: "mg" },
   { key: "vit_c_mg", label_en: "Vit C", label_zh: "维生素C", label_th: "วิตามินซี", unit: "mg" },
   { key: "vit_d_ug", label_en: "Vit D", label_zh: "维生素D", label_th: "วิตามินดี", unit: "μg" },

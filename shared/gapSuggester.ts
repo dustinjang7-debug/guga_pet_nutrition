@@ -51,7 +51,7 @@ const ADDITIVE_BY_NUTRIENT: Record<string, AdditiveRecipe | undefined> = {
   vit_b5_mg: { ingredientId: 157, nutrientField: "vit_b5_mg", maxGrams: 30 },
   vit_b6_mg: { ingredientId: 157, nutrientField: "vit_b6_mg", maxGrams: 30 },
   niacin_mg: { ingredientId: 157, nutrientField: "niacin_mg", maxGrams: 30 },
-  vit_b12_ug: { ingredientId: 44, nutrientField: "vit_b12_ug", maxGrams: 100 }, // Beef liver
+  vit_b12_mg: { ingredientId: 44, nutrientField: "vit_b12_mg", maxGrams: 100 }, // Beef liver
   folate_mg: { ingredientId: 157, nutrientField: "folate_mg", maxGrams: 30 },
   choline_mg: { ingredientId: 81, nutrientField: "choline_mg", maxGrams: 60 }, // Egg yolk
 };
@@ -209,7 +209,7 @@ export const B_VITAMIN_KEYS = [
   "vit_b5_mg",
   "vit_b6_mg",
   "folate_mg",
-  "vit_b12_ug",
+  "vit_b12_mg",
 ] as const;
 
 export type BVitaminKey = typeof B_VITAMIN_KEYS[number];

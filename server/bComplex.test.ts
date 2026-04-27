@@ -46,7 +46,7 @@ describe("bComplexReport — wizard B-vitamin step", () => {
       "vit_b5_mg",
       "vit_b6_mg",
       "folate_mg",
-      "vit_b12_ug",
+      "vit_b12_mg",
     ]);
   });
 
@@ -114,7 +114,7 @@ describe("bComplexReport — wizard B-vitamin step", () => {
       okRow("vit_b5_mg", "mg/kg DM"),
       okRow("vit_b6_mg", "mg/kg DM"),
       okRow("folate_mg", "mg/kg DM"),
-      okRow("vit_b12_ug", "μg/kg DM"),
+      okRow("vit_b12_mg", "μg/kg DM"),
     ];
     const report = bComplexReport(aafco, 1000, 1000);
 
