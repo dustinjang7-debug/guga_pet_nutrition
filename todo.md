@@ -133,3 +133,11 @@
 - [x] Step shows green only when ALL B vitamins meet AAFCO
 - [x] Vitest tests for the new B-vitamin gap detector
 - [x] Relax handCalcAudit B12 sanity assertion (DB-as-source-of-truth per product decision)
+
+## v0.3.3 — Wizard layout restructure
+
+- [x] Wizard: dedicated setup screen for pet profile + starting volume (entered first; user proceeds to step 1)
+- [x] On step screens: show pet profile + starting volume as compact text line above the step header (with Edit link to return to setup screen)
+- [x] Column order on step screens (left → right): Summary (collapsed) + Current Recipe (open) | Ingredient Picker | AAFCO compliance panel
+- [x] Left rail: Summary collapsed by default
+- [x] Left rail: Current Recipe panel rendered open directly below Summary

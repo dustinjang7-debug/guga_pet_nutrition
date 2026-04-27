@@ -38,7 +38,7 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Check, ChevronRight, FlaskConical, Leaf,
-  ListChecks, Loader2, Save, Search, Sparkles, X,
+  ListChecks, Loader2, Pencil, Save, Search, Sparkles, X,
 } from "lucide-react";
 
 import {
@@ -72,6 +72,11 @@ export default function WizardPage() {
   const [startingVolume, setStartingVolume] = useState(1000);
   const [items, setItems] = useState<RecipeItem[]>([]);
   const [stepIdx, setStepIdx] = useState<StepIndex>(0);
+  // -1 = setup phase (pet profile + starting volume); 0..N = step screens.
+  // Editing an existing recipe skips setup; new recipes start in setup.
+  const [phase, setPhase] = useState<"setup" | "steps">(() =>
+    params.id ? "steps" : "setup",
+  );
   const [recipeName, setRecipeName] = useState("");
   const [notes, setNotes] = useState("");
   const [recipeStatus, setRecipeStatus] = useState<"draft" | "approved">("draft");
@@ -218,8 +223,10 @@ export default function WizardPage() {
   }
 
   // ----- Step navigation -----------------------------------------------------
-  const isComplianceStep = stepIdx >= COMPLIANCE_INDEX;
-  const currentStep: WizardStep | null = isComplianceStep ? null : WIZARD_STEPS[stepIdx];
+  const isSetup = phase === "setup";
+  const isComplianceStep = !isSetup && stepIdx >= COMPLIANCE_INDEX;
+  const currentStep: WizardStep | null =
+    isSetup ? null : isComplianceStep ? null : WIZARD_STEPS[stepIdx];
 
   function nextStep() {
     setStepIdx((i) => Math.min(i + 1, COMPLIANCE_INDEX));
@@ -240,84 +247,87 @@ export default function WizardPage() {
           onOpenSave={() => setSaveOpen(true)}
           itemsCount={items.length}
           isEditing={isEditing}
+          isSetup={isSetup}
         />
 
-        <div className="grid grid-cols-12 gap-4 sm:gap-5 mt-4 sm:mt-6">
-          {/* Left rail: Pet Profile + Starting Volume + Summary */}
-          <div className="col-span-12 lg:col-span-3 space-y-4 lg:sticky lg:top-20 self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-            <PetProfilePane value={pet} onChange={setPet} lang={lang} />
-
-            <Card className="p-4 space-y-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                {t("starting_volume", lang)}
-              </Label>
-              <Input
-                type="number"
-                value={startingVolume}
-                onChange={(e) => setStartingVolume(parseInt(e.target.value || "0", 10))}
-                min={100}
-                max={10000}
-                step={50}
-                data-numeric="true"
-              />
-              <div className="text-xs text-muted-foreground">
-                {t("used", lang)}: <span data-numeric="true">{items.reduce((s, i) => s + i.grams, 0).toFixed(0)}</span>g
-              </div>
-            </Card>
-
-            <SummaryCard
-              macros={macros}
+        {/* Setup phase: pet profile + starting volume only */}
+        {isSetup ? (
+          <SetupScreen
+            pet={pet}
+            setPet={setPet}
+            startingVolume={startingVolume}
+            setStartingVolume={setStartingVolume}
+            onBegin={() => setPhase("steps")}
+            lang={lang}
+          />
+        ) : (
+          <>
+            {/* Compact pet/volume summary above the fold */}
+            <PetVolumeStrip
+              pet={pet}
+              startingVolume={startingVolume}
               daily={daily}
-              totals={totals}
-              species={pet.species}
-              isGrowth={isGrowth}
+              onEdit={() => setPhase("setup")}
               lang={lang}
             />
-          </div>
 
-          {/* Center: step card */}
-          <div className="col-span-12 lg:col-span-6 space-y-4">
-            {currentStep ? (
-              <NutrientStepCard
-                step={currentStep}
-                pet={pet}
-                items={items}
-                aafco={aafco}
-                totals={totals}
-                startingVolume={startingVolume}
-                onAdd={upsertItem}
-                onSetGrams={setItemGrams}
-                onSkip={nextStep}
-                onBack={prevStep}
-                isFirstStep={stepIdx === 0}
-              />
-            ) : (
-              <ComplianceCheckCard
-                aafco={aafco}
-                items={items}
-                totalDM_g={macros.totalDryMatter_g}
-                onAdd={incrementItem}
-                onBack={prevStep}
-                onFinish={() => setSaveOpen(true)}
-                onGoToSimple={() =>
-                  navigate(isEditing ? `/recipe/${recipeId}` : `/recipe/new`)
-                }
-              />
-            )}
+            <div className="grid grid-cols-12 gap-4 sm:gap-5 mt-4 sm:mt-6">
+              {/* Left rail: Summary (collapsed) + Current Recipe (open) */}
+              <div className="col-span-12 lg:col-span-3 space-y-4 lg:sticky lg:top-20 self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+                <SummaryCard
+                  macros={macros}
+                  daily={daily}
+                  totals={totals}
+                  species={pet.species}
+                  isGrowth={isGrowth}
+                  lang={lang}
+                  startCollapsed
+                />
+                <RecipeSoFar
+                  items={items}
+                  onSetGrams={setItemGrams}
+                  onRemove={(id) => setItems((p) => p.filter((i) => i.ingredientId !== id))}
+                />
+              </div>
 
-            {/* Always-visible recipe so far */}
-            <RecipeSoFar
-              items={items}
-              onSetGrams={setItemGrams}
-              onRemove={(id) => setItems((p) => p.filter((i) => i.ingredientId !== id))}
-            />
-          </div>
+              {/* Center: ingredient picker / step card */}
+              <div className="col-span-12 lg:col-span-6 space-y-4">
+                {currentStep ? (
+                  <NutrientStepCard
+                    step={currentStep}
+                    pet={pet}
+                    items={items}
+                    aafco={aafco}
+                    totals={totals}
+                    startingVolume={startingVolume}
+                    onAdd={upsertItem}
+                    onSetGrams={setItemGrams}
+                    onSkip={nextStep}
+                    onBack={prevStep}
+                    isFirstStep={stepIdx === 0}
+                  />
+                ) : (
+                  <ComplianceCheckCard
+                    aafco={aafco}
+                    items={items}
+                    totalDM_g={macros.totalDryMatter_g}
+                    onAdd={incrementItem}
+                    onBack={prevStep}
+                    onFinish={() => setSaveOpen(true)}
+                    onGoToSimple={() =>
+                      navigate(isEditing ? `/recipe/${recipeId}` : `/recipe/new`)
+                    }
+                  />
+                )}
+              </div>
 
-          {/* Right: live AAFCO compliance */}
-          <div className="col-span-12 lg:col-span-3">
-            <AafcoPanel rows={aafco} lang={lang} basis={"dm"} setBasis={() => undefined} />
-          </div>
-        </div>
+              {/* Right: live AAFCO compliance */}
+              <div className="col-span-12 lg:col-span-3">
+                <AafcoPanel rows={aafco} lang={lang} basis={"dm"} setBasis={() => undefined} />
+              </div>
+            </div>
+          </>
+        )}
 
         <SaveDialog
           open={saveOpen}
@@ -338,6 +348,131 @@ export default function WizardPage() {
 }
 
 // ============================================================================
+// Setup Screen — pet profile + starting volume (entered before step 1)
+// ============================================================================
+
+function SetupScreen({
+  pet,
+  setPet,
+  startingVolume,
+  setStartingVolume,
+  onBegin,
+  lang,
+}: {
+  pet: PetProfileState;
+  setPet: (p: PetProfileState) => void;
+  startingVolume: number;
+  setStartingVolume: (n: number) => void;
+  onBegin: () => void;
+  lang: "en" | "zh" | "th";
+}) {
+  const canBegin = pet.bodyWeightKg > 0 && !!pet.lifeStageKey && startingVolume >= 100;
+  return (
+    <div className="max-w-3xl mx-auto mt-6 sm:mt-10 space-y-6">
+      <div className="text-center">
+        <h2 className="font-display text-2xl sm:text-3xl font-bold">
+          {t("wizard_setup_title", lang)}
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground max-w-xl mx-auto">
+          {t("wizard_setup_desc", lang)}
+        </p>
+      </div>
+
+      <PetProfilePane value={pet} onChange={setPet} lang={lang} collapsible={false} />
+
+      <Card className="p-5 space-y-3">
+        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+          {t("starting_volume", lang)}
+        </Label>
+        <Input
+          type="number"
+          value={startingVolume}
+          onChange={(e) => setStartingVolume(parseInt(e.target.value || "0", 10))}
+          min={100}
+          max={10000}
+          step={50}
+          data-numeric="true"
+          className="max-w-xs"
+        />
+        <p className="text-xs text-muted-foreground">
+          {lang === "zh"
+            ? "这是一次制作的总重量（克），随后可随时调整。"
+            : lang === "th"
+            ? "ปริมาณรวมของสูตรต่อหนึ่งสูตร (กรัม) ปรับได้ภายหลัง"
+            : "Total batch weight (grams). You can change this anytime."}
+        </p>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={onBegin} disabled={!canBegin} size="lg">
+          {t("wizard_begin", lang)} <ArrowRight className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Pet+Volume strip — shown above the fold on every step screen
+// ============================================================================
+
+function PetVolumeStrip({
+  pet,
+  startingVolume,
+  daily,
+  onEdit,
+  lang,
+}: {
+  pet: PetProfileState;
+  startingVolume: number;
+  daily: { feedingGrams: number; derKcal: number };
+  onEdit: () => void;
+  lang: "en" | "zh" | "th";
+}) {
+  const stage =
+    pet.species === "dog"
+      ? DOG_LIFE_STAGES[pet.lifeStageKey as keyof typeof DOG_LIFE_STAGES]
+      : CAT_LIFE_STAGES[pet.lifeStageKey as keyof typeof CAT_LIFE_STAGES];
+  const stageLabel = stage
+    ? lang === "zh" ? stage.label_zh : lang === "th" ? stage.label_th : stage.label_en
+    : "";
+  const speciesLabel = t(pet.species === "dog" ? "species_dog" : "species_cat", lang);
+  const petName = pet.petName?.trim();
+  return (
+    <Card className="mt-4 px-4 py-2.5 flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="font-semibold">{petName || speciesLabel}</span>
+        <span className="text-muted-foreground">·</span>
+        <span data-numeric="true">{pet.bodyWeightKg}</span>
+        <span className="text-muted-foreground">kg</span>
+        <span className="text-muted-foreground">·</span>
+        <span>{stageLabel}</span>
+        <span className="text-muted-foreground">·</span>
+        <span className="text-muted-foreground">×</span>
+        <span data-numeric="true">{pet.factor.toFixed(2)}</span>
+      </div>
+      <div className="h-4 w-px bg-border hidden sm:block" />
+      <div className="text-sm text-muted-foreground">
+        {t("setup_summary_eat", lang)}{" "}
+        <span data-numeric="true" className="text-foreground font-medium">
+          {daily.feedingGrams.toFixed(0)}
+        </span>{" "}
+        g {t("setup_summary_perday", lang)}
+        <span className="mx-2">·</span>
+        {lang === "zh" ? "批次总重" : lang === "th" ? "ปริมาณรวม" : "Batch"}{" "}
+        <span data-numeric="true" className="text-foreground font-medium">
+          {startingVolume}
+        </span>{" "}
+        g
+      </div>
+      <Button variant="ghost" size="sm" onClick={onEdit} className="ml-auto h-7 px-2 text-xs">
+        <Pencil className="size-3" /> {t("edit", lang)}
+      </Button>
+    </Card>
+  );
+}
+
+// ============================================================================
 // Header
 // ============================================================================
 
@@ -349,6 +484,7 @@ function WizardHeader({
   onOpenSave,
   itemsCount,
   isEditing,
+  isSetup,
 }: {
   stepIdx: number;
   totalSteps: number;
@@ -357,16 +493,23 @@ function WizardHeader({
   onOpenSave: () => void;
   itemsCount: number;
   isEditing: boolean;
+  isSetup: boolean;
 }) {
   const [lang] = useLang();
-  const progressPct = ((stepIdx + 1) / totalSteps) * 100;
-  const labelEn = stepIdx >= totalSteps - 1
+  const progressPct = isSetup ? 0 : ((stepIdx + 1) / totalSteps) * 100;
+  const labelEn = isSetup
+    ? "Setup"
+    : stepIdx >= totalSteps - 1
     ? "Compliance check"
     : `Step ${stepIdx + 1} of ${totalSteps - 1}`;
-  const labelZh = stepIdx >= totalSteps - 1
+  const labelZh = isSetup
+    ? "初始设置"
+    : stepIdx >= totalSteps - 1
     ? "合规检查"
     : `第 ${stepIdx + 1} / ${totalSteps - 1} 步`;
-  const labelTh = stepIdx >= totalSteps - 1
+  const labelTh = isSetup
+    ? "ตั้งค่าเริ่มต้น"
+    : stepIdx >= totalSteps - 1
     ? "ตรวจ Compliance"
     : `ขั้นที่ ${stepIdx + 1} / ${totalSteps - 1}`;
 

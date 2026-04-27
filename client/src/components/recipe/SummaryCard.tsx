@@ -42,16 +42,18 @@ export function SummaryCard({
   species?: Species;
   isGrowth?: boolean;
   lang: Lang;
-  /** When true, the card collapses to a one-line summary once a recipe has weight. */
+  /** When true (default), the card starts collapsed; expandable on click. */
   collapsible?: boolean;
+  /** When true, the card starts collapsed even with no recipe yet (caller wants compact left rail). */
+  startCollapsed?: boolean;
 }) {
   const ratio = totals
     ? caPhosphorusRatio(totals, species, isGrowth)
     : null;
 
-  // Auto-collapse once a meaningful recipe exists; user can re-expand by clicking.
   const hasContent = macros.totalGrams > 0;
-  const [expanded, setExpanded] = useState<boolean>(true);
+  // If caller asks startCollapsed, begin collapsed regardless of content.
+  const [expanded, setExpanded] = useState<boolean>(false);
   const [autoCollapsed, setAutoCollapsed] = useState(false);
   useEffect(() => {
     if (hasContent && !autoCollapsed) {
@@ -66,27 +68,31 @@ export function SummaryCard({
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
           {t("summary", lang)}
         </h2>
-        {hasContent && (
-          <Button variant="ghost" size="sm" onClick={() => setExpanded((x) => !x)} className="h-7 px-2">
-            {expanded ? <ChevronUp className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            <span className="text-xs">{expanded ? (lang === "zh" ? "收起" : lang === "th" ? "⊥⊦" : "Collapse") : (lang === "zh" ? "展开" : lang === "th" ? "ขยาย" : "Expand")}</span>
-          </Button>
-        )}
+        <Button variant="ghost" size="sm" onClick={() => setExpanded((x) => !x)} className="h-7 px-2">
+          {expanded ? <ChevronUp className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          <span className="text-xs">{expanded ? (lang === "zh" ? "收起" : lang === "th" ? "ย่อ" : "Collapse") : (lang === "zh" ? "展开" : lang === "th" ? "ขยาย" : "Expand")}</span>
+        </Button>
       </div>
 
       {/* Collapsed: one-line summary */}
-      {hasContent && !expanded && (
+      {!expanded && (
         <button
           onClick={() => setExpanded(true)}
           className="w-full text-left rounded-md border border-border/60 bg-secondary/30 hover:bg-secondary/50 px-3 py-2 transition-colors text-sm text-muted-foreground"
         >
-          <span data-numeric="true" className="text-foreground font-medium">{macros.totalGrams.toFixed(0)}</span> g
-          {" · "}
-          <span data-numeric="true" className="text-foreground font-medium">{macros.totalKcal.toFixed(0)}</span> kcal
-          {" · "}
-          <span data-numeric="true" className="text-foreground">{daily.feedingGrams.toFixed(0)}</span> g/day
-          {ratio && ratio.ratio !== null && (
-            <span className="ml-2">· Ca:P <span data-numeric="true" className="text-foreground">{ratio.ratio.toFixed(2)}</span></span>
+          {hasContent ? (
+            <>
+              <span data-numeric="true" className="text-foreground font-medium">{macros.totalGrams.toFixed(0)}</span> g
+              {" · "}
+              <span data-numeric="true" className="text-foreground font-medium">{macros.totalKcal.toFixed(0)}</span> kcal
+              {" · "}
+              <span data-numeric="true" className="text-foreground">{daily.feedingGrams.toFixed(0)}</span> g/day
+              {ratio && ratio.ratio !== null && (
+                <span className="ml-2">· Ca:P <span data-numeric="true" className="text-foreground">{ratio.ratio.toFixed(2)}</span></span>
+              )}
+            </>
+          ) : (
+            <span className="italic">{lang === "zh" ? "点击展开查看总重 / 热量 / 每日建议" : lang === "th" ? "คลิกเพื่อดูน้ำหนักรวม / แคลอรี่ / ต่อวัน" : "Click to view total weight / kcal / per-day"}</span>
           )}
         </button>
       )}

@@ -116,6 +116,14 @@ const DICT = {
     recipe_empty: "No ingredients yet. Add your first one from the picker.",
     current_recipe: "Current recipe",
     ingredients_count: "ingredients",
+
+    // Wizard setup
+    wizard_setup_title: "Setup",
+    wizard_setup_desc: "Tell us about your pet and how much food we're building. You can edit this later.",
+    wizard_begin: "Begin wizard",
+    edit: "Edit",
+    setup_summary_eat: "will eat",
+    setup_summary_perday: "per day",
   },
   zh: {
     appName: "GUGA 营养",
@@ -213,7 +221,15 @@ const DICT = {
     empty_recipes: "尚未保存任何配方。",
     recipe_empty: "尚未添加食材。请从右侧选择第一种。",
     current_recipe: "当前配方",
-    ingredients_count: "种食材",
+    ingredients_count: "种",
+
+    // Wizard setup
+    wizard_setup_title: "初始设置",
+    wizard_setup_desc: "填写宠物信息与配方总重量，随后可随时修改。",
+    wizard_begin: "开始向导",
+    edit: "修改",
+    setup_summary_eat: "预计进食",
+    setup_summary_perday: "/ 天",
   },
   th: {
     appName: "GUGA Nutrition",
@@ -312,6 +328,14 @@ const DICT = {
     recipe_empty: "ยังไม่มีวัตถุดิบ เลือกตัวแรกจากรายการทางขวา",
     current_recipe: "สูตรปัจจุบัน",
     ingredients_count: "รายการ",
+
+    // Wizard setup
+    wizard_setup_title: "ตั้งค่าเริ่มต้น",
+    wizard_setup_desc: "บอกข้อมูลสัตว์เลี้ยงและปริมาณสูตร แก้ไขได้ภายหลัง",
+    wizard_begin: "เริ่มบันทึกสูตร",
+    edit: "แก้ไข",
+    setup_summary_eat: "กิน",
+    setup_summary_perday: "ต่อวัน",
   },
 } as const;
 
