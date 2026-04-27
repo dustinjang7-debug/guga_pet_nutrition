@@ -9,10 +9,10 @@ import type { AafcoRow } from "@shared/calc";
  * Row-level background tint mapped to AAFCO status.
  *
  * Per user request:
- *   below      -> red    (insufficient)
- *   borderline -> red    (also insufficient — need more)
- *   ok         -> green  (within band)
- *   above      -> orange (exceeds AAFCO max)
+ *   below      -> red     (insufficient)
+ *   borderline -> green   (meets AAFCO min, within 10% — tight margin)
+ *   ok         -> green   (comfortably within band)
+ *   above      -> orange  (exceeds AAFCO max)
  *   no_target  -> neutral
  *
  * Tints are kept faint so the row text stays readable.
@@ -20,7 +20,7 @@ import type { AafcoRow } from "@shared/calc";
 function rowClass(s: AafcoRow["status"]): string {
   switch (s) {
     case "below":      return "bg-red-50/80 hover:bg-red-100/80";
-    case "borderline": return "bg-red-50/60 hover:bg-red-100/60";
+    case "borderline": return "bg-emerald-50/60 hover:bg-emerald-100/80";
     case "ok":         return "bg-emerald-50/80 hover:bg-emerald-100/80";
     case "above":      return "bg-orange-50/80 hover:bg-orange-100/80";
     case "no_target":  return "hover:bg-secondary/20";
@@ -31,7 +31,7 @@ function rowClass(s: AafcoRow["status"]): string {
 function rowAccent(s: AafcoRow["status"]): string {
   switch (s) {
     case "below":      return "border-l-4 border-l-red-400";
-    case "borderline": return "border-l-4 border-l-red-300";
+    case "borderline": return "border-l-4 border-l-emerald-300";
     case "ok":         return "border-l-4 border-l-emerald-400";
     case "above":      return "border-l-4 border-l-orange-400";
     case "no_target":  return "border-l-4 border-l-transparent";
@@ -82,8 +82,8 @@ export function AafcoPanel({
           {t("aafco_panel", lang)}
         </h2>
         <div className="flex items-center gap-3 text-[11px]">
-          <Legend dotClass="bg-emerald-400" label={lang === "zh" ? "达标" : lang === "th" ? "ผ่าน" : "Met"}      count={counts.ok} />
-          <Legend dotClass="bg-red-400"     label={lang === "zh" ? "不足" : lang === "th" ? "ขาด"  : "Below"}    count={counts.below + counts.borderline} />
+          <Legend dotClass="bg-emerald-400" label={lang === "zh" ? "达标" : lang === "th" ? "ผ่าน" : "Met"}      count={counts.ok + counts.borderline} />
+          <Legend dotClass="bg-red-400"     label={lang === "zh" ? "不足" : lang === "th" ? "ขาด"  : "Below"}    count={counts.below} />
           <Legend dotClass="bg-orange-400"  label={lang === "zh" ? "超标" : lang === "th" ? "เกิน" : "Over max"} count={counts.above} />
         </div>
       </div>
@@ -137,7 +137,7 @@ export function AafcoPanel({
                   </td>
                   {onAutoFix && (
                     <td className="text-right px-5 py-2 w-12">
-                      {(row.status === "below" || row.status === "borderline" || row.status === "above") && (
+                      {(row.status === "below" || row.status === "above") && (
                         <button
                           onClick={() => onAutoFix(row.nutrient.key)}
                           className="text-[10px] font-medium text-primary hover:underline"

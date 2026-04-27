@@ -101,3 +101,62 @@ describe("gapSuggester.formatGrams", () => {
     expect(formatGrams(Infinity)).toBe("—");
   });
 });
+
+
+describe("gapSuggester.suggestRemediations — borderline regression", () => {
+  it("does NOT include 'borderline' rows (within 10% of min) as remediation gaps", () => {
+    // Synthetic AAFCO row at exactly 4352 mg/kg DM vs min 4000.
+    // Old logic flagged this as borderline and surfaced it as a gap.
+    // New logic should treat it as compliant for the purposes of remediation.
+    const rows: AafcoRow[] = [
+      {
+        nutrient: {
+          key: "phosphorus_mg",
+          label_en: "Phosphorus",
+          label_zh: "磷",
+          label_th: "ฟอสฟอรัส",
+          unit: "mg/kg DM",
+          adultMin: 4000,
+          growthMin: 10000,
+          max: 16000,
+        },
+        amountInRecipe: 100,
+        perKgDM: 4352,
+        per1000kcal: 0,
+        status: "borderline",
+        min: 4000,
+        max: 16000,
+        delta: 48,
+      },
+    ];
+    const gaps = suggestRemediations(rows, 1000, []);
+    expect(gaps).toHaveLength(0);
+  });
+
+  it("DOES include true 'below' rows as remediation gaps", () => {
+    const rows: AafcoRow[] = [
+      {
+        nutrient: {
+          key: "calcium_mg",
+          label_en: "Calcium",
+          label_zh: "钙",
+          label_th: "แคลเซียม",
+          unit: "mg/kg DM",
+          adultMin: 5000,
+          growthMin: 12000,
+          max: 25000,
+        },
+        amountInRecipe: 100,
+        perKgDM: 1000,
+        per1000kcal: 0,
+        status: "below",
+        min: 5000,
+        max: 25000,
+        delta: 4000,
+      },
+    ];
+    const gaps = suggestRemediations(rows, 1000, []);
+    expect(gaps.length).toBeGreaterThan(0);
+    expect(gaps[0].row.nutrient.key).toBe("calcium_mg");
+  });
+});

@@ -143,7 +143,9 @@ export function suggestRemediations(
 
   const out: GapSuggestion[] = [];
   for (const row of rows) {
-    if (row.status !== "below" && row.status !== "borderline") continue;
+    // Only flag actual shortfalls. "borderline" means within 10% of the AAFCO
+    // minimum — still meeting the standard — so we don't surface it as a gap.
+    if (row.status !== "below") continue;
 
     const absoluteShortfall = gapToAbsolute(row, totalDM_g);
     if (absoluteShortfall <= 0) continue;
@@ -287,13 +289,13 @@ export function bComplexReport(
   });
 
   const belowCount = perVitamin.filter(
-    (v) => v.status === "below" || v.status === "borderline",
+    (v) => v.status === "below",
   ).length;
   const allMet = belowCount === 0 && perVitamin.some((v) => v.row !== undefined);
 
   // Worst gap = largest grams-to-fix among unmet vitamins (ignore Infinity entries).
   const finiteGaps = perVitamin
-    .filter((v) => v.status === "below" || v.status === "borderline")
+    .filter((v) => v.status === "below")
     .map((v) => v.yeastGramsToFix)
     .filter((g) => Number.isFinite(g));
   const worstFix = finiteGaps.length > 0 ? Math.max(...finiteGaps) : 0;

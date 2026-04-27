@@ -1369,31 +1369,31 @@ function BVitaminPanel({
       </div>
       <ul className="divide-y divide-border">
         {report.perVitamin.map((v) => {
-          const isBad = v.status === "below" || v.status === "borderline";
-          const isOk = v.status === "ok";
+          const isBad = v.status === "below";
+          const isOk = v.status === "ok" || v.status === "borderline";
           const rowClass = isBad
             ? "bg-red-50/60"
             : isOk
               ? "bg-emerald-50/40"
               : "";
-          const statusText = isOk
+          const statusText = v.status === "ok"
             ? lang === "zh"
               ? "达标"
               : lang === "th"
                 ? "ผ่าน"
                 : "ok"
-            : v.status === "below"
+            : v.status === "borderline"
               ? lang === "zh"
-                ? "不足"
+                ? "达标·偏紧"
                 : lang === "th"
-                  ? "ต่ำกว่า"
-                  : "below"
-              : v.status === "borderline"
+                  ? "ผ่าน·ชิดขั้นต่ำ"
+                  : "ok (tight)"
+              : v.status === "below"
                 ? lang === "zh"
-                  ? "边缘"
+                  ? "不足"
                   : lang === "th"
-                    ? "ใกล้"
-                    : "close"
+                    ? "ต่ำกว่า"
+                    : "below"
                 : v.status === "above"
                   ? lang === "zh"
                     ? "偏高"
@@ -1405,11 +1405,9 @@ function BVitaminPanel({
             ? "text-emerald-700"
             : v.status === "below"
               ? "text-red-700"
-              : v.status === "borderline"
-                ? "text-amber-700"
-                : v.status === "above"
-                  ? "text-orange-700"
-                  : "text-muted-foreground";
+              : v.status === "above"
+                ? "text-orange-700"
+                : "text-muted-foreground";
           return (
             <li
               key={v.key}
@@ -1497,7 +1495,7 @@ function nutrientLabelByKey(key: string, lang: "en" | "zh" | "th"): string {
 
 function statusColor(status: AafcoRow["status"]): string {
   if (status === "ok") return "text-emerald-600";
-  if (status === "borderline") return "text-amber-600";
+  if (status === "borderline") return "text-emerald-600"; // meets AAFCO min within 10%
   if (status === "below") return "text-red-600";
   if (status === "above") return "text-orange-600";
   return "text-muted-foreground";
