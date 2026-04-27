@@ -196,6 +196,127 @@ export function suggestRemediations(
   return out;
 }
 
+// ----------------------------------------------------------------------------
+// B-vitamin complex helper (Wizard step 5)
+// ----------------------------------------------------------------------------
+
+/** B vitamins evaluated by the wizard B-complex step. Choline is excluded
+ * because it has its own dedicated wizard step. */
+export const B_VITAMIN_KEYS = [
+  "vit_b1_mg",
+  "vit_b2_mg",
+  "niacin_mg",
+  "vit_b5_mg",
+  "vit_b6_mg",
+  "folate_mg",
+  "vit_b12_ug",
+] as const;
+
+export type BVitaminKey = typeof B_VITAMIN_KEYS[number];
+
+export interface BVitaminStatus {
+  /** Nutrient field key (matches Ingredient interface). */
+  key: BVitaminKey;
+  /** AAFCO row for this nutrient (or undefined if no benchmark exists). */
+  row: AafcoRow | undefined;
+  /** Status: ok | below | borderline | above | no_target. */
+  status: AafcoRow["status"] | "no_target";
+  /** Absolute shortfall in source unit (mg or μg) for the whole recipe. */
+  shortfall: number;
+  /** Grams of brewer's yeast needed to close THIS vitamin's gap on its own. */
+  yeastGramsToFix: number;
+}
+
+export interface BComplexReport {
+  perVitamin: BVitaminStatus[];
+  /** True if every B vitamin is at or above its AAFCO min. */
+  allMet: boolean;
+  /** Number of B vitamins currently below or borderline. */
+  belowCount: number;
+  /** Recommended grams of brewer's yeast to add — covers the WORST gap, but
+   * capped at 2% of total recipe weight (or `recipeGramsCap`). */
+  recommendedYeastGrams: number;
+  /** True if the recommendation hit the 2% cap (i.e. yeast alone won't fully fix). */
+  cappedAt2Pct: boolean;
+  /** The 2% ceiling actually used (grams). */
+  yeastCap_g: number;
+}
+
+/**
+ * Inspect the AAFCO comparison for the seven B vitamins and produce a single
+ * recommendation: how much brewer's yeast (id 157) to add, capped at 2% of
+ * total recipe weight.
+ *
+ * @param rows           the live AAFCO comparison output
+ * @param totalDM_g      recipe dry matter (g) — needed to convert per-kg-DM
+ *                       deficits into absolute amounts
+ * @param totalRecipe_g  recipe total weight (g) — used to compute the 2% ceiling
+ */
+export function bComplexReport(
+  rows: AafcoRow[],
+  totalDM_g: number,
+  totalRecipe_g: number,
+): BComplexReport {
+  const yeast = INGREDIENT_BY_ID[157]; // Brewer's yeast
+  const yeastCap = Math.max(0, totalRecipe_g) * 0.02;
+
+  const perVitamin: BVitaminStatus[] = B_VITAMIN_KEYS.map((key) => {
+    const row = rows.find((r) => r.nutrient.key === key);
+    if (!row) {
+      return {
+        key,
+        row: undefined,
+        status: "no_target" as const,
+        shortfall: 0,
+        yeastGramsToFix: 0,
+      };
+    }
+    const shortfall = gapToAbsolute(row, totalDM_g);
+    let yeastGramsToFix = 0;
+    if (shortfall > 0 && yeast) {
+      const density = (yeast[key as keyof Ingredient] as number) ?? 0;
+      yeastGramsToFix = density > 0 ? gramsToCloseGap(shortfall, density) : Infinity;
+    }
+    return {
+      key,
+      row,
+      status: row.status,
+      shortfall,
+      yeastGramsToFix,
+    };
+  });
+
+  const belowCount = perVitamin.filter(
+    (v) => v.status === "below" || v.status === "borderline",
+  ).length;
+  const allMet = belowCount === 0 && perVitamin.some((v) => v.row !== undefined);
+
+  // Worst gap = largest grams-to-fix among unmet vitamins (ignore Infinity entries).
+  const finiteGaps = perVitamin
+    .filter((v) => v.status === "below" || v.status === "borderline")
+    .map((v) => v.yeastGramsToFix)
+    .filter((g) => Number.isFinite(g));
+  const worstFix = finiteGaps.length > 0 ? Math.max(...finiteGaps) : 0;
+
+  let recommended = worstFix;
+  let capped = false;
+  if (recommended > yeastCap) {
+    recommended = yeastCap;
+    capped = true;
+  }
+  // Floor a tiny positive recommendation so we don't show 0.0 g for a real gap.
+  if (worstFix > 0 && recommended < 0.1) recommended = Math.min(0.1, yeastCap);
+
+  return {
+    perVitamin,
+    allMet,
+    belowCount,
+    recommendedYeastGrams: recommended,
+    cappedAt2Pct: capped,
+    yeastCap_g: yeastCap,
+  };
+}
+
 /**
  * Format the additive's "grams needed" for display. Rounds to 0.1 g granularity
  * but never below 0.1 g (so we don't show 0.0 g for a real shortfall).

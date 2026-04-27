@@ -93,9 +93,43 @@
 - [x] Right = AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
 - [x] Status band (red/green/orange) added to AafcoFixSheet header
 
-## v0.2.6 — AAFCO unit-mismatch bug (URGENT)
+## v0.2.6 — AAFCO unit-mismatch bug (DONE)
 
-- [ ] Audit AAFCO threshold units vs ingredient nutrient units (esp. B12, Ca, P, Na — eggshell 6g should easily pass Ca min)
-- [ ] Fix unit conversion in computeAafco (calc.ts)
-- [ ] Add regression test: 6g eggshell powder in a ~700g recipe → Ca within range, not below
-- [ ] Verify B12 (μg vs mg), Phosphorus (g vs mg/kg DM), Sodium (mg vs g/kg DM)
+- [x] Audit AAFCO threshold units vs ingredient nutrient units
+- [x] Fix unit conversion in computeAafco (calc.ts) — labeled mg/kg DM, removed divide-by-1000
+- [x] Regression test: 6g eggshell in ~700g recipe → Ca above min
+- [x] Verify B12 (μg), P/Na (mg/kg DM) thresholds
+
+## v0.2.7 — Data audit (DONE — read-only)
+
+- [x] USDA FDC lookup for chicken liver / raw oyster / egg yolk
+- [x] Side-by-side comparison report at /home/ubuntu/usda_vs_guga_3.md
+- [x] DB NOT modified
+
+## v0.3 — USDA FDC review (read-only — live DB never modified)
+
+- [x] Verify uploaded SR Legacy CSV bundle (FoodData_Central_sr_legacy_food_csv_2018-04.zip)
+- [x] First-pass name-matching script: GUGA 238 → FDC food entries
+- [ ] Enhance matcher with HIGH_OK / NEEDS_REVIEW / NO_USDA_MATCH flags
+- [ ] Provide top-5 alternative FDC candidates per ambiguous row
+- [ ] Generate matches_review.csv for user manual review
+- [ ] Generate Markdown summary grouped by category
+- [ ] Niacin already exists as `niacin_mg` (FDC nutrient 1167)
+- [ ] User picks correct matches; no DB swap until then
+
+## v0.3.1 — USDA review round 2 (read-only)
+
+- [ ] Parse guga_usda_decisions.json from user
+- [ ] Lock in accepted matches into a "decisions ledger"
+- [ ] Rewrite matcher v3: noun-priority scoring, Foundation as tiebreaker not override
+- [ ] Re-run only on skipped/no-match rows
+- [ ] Build round-2 review tool with shortlisted rows only
+- [ ] User reviews round 2 → final decisions JSON
+
+## v0.3.2 — Wizard B-vitamin overhaul
+
+- [x] Wizard B-vitamin step: replace single B1 check with all B vitamins (B1, B2, B3/niacin, B5, B6, B12, folate — NOT choline; choline has its own step) vs AAFCO benchmarks
+- [x] If any B vitamin below min → suggest brewer's yeast (cap suggested amount at 2% of total recipe weight)
+- [x] Step shows green only when ALL B vitamins meet AAFCO
+- [x] Vitest tests for the new B-vitamin gap detector
+- [x] Relax handCalcAudit B12 sanity assertion (DB-as-source-of-truth per product decision)

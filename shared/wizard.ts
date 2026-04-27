@@ -185,9 +185,13 @@ export const WIZARD_STEPS: WizardStep[] = [
     title_zh: "B族维生素 — 啤酒酵母",
     title_th: "วิตามินบี — ยีสต์เบียร์",
     desc_en:
-      "Brewer's yeast covers most B vitamins. ~2% of starting volume.",
-    desc_zh: "啤酒酵母可一次性补足大部分B族维生素,约配方初始重量的2%。",
+      "We check ALL B vitamins (B1, B2, B3, B5, B6, folate, B12) against AAFCO. If any are below min, add brewer's yeast — capped at 2% of recipe weight.",
+    desc_zh: "检查全部B族维生素（B1, B2, B3, B5, B6, 叶酸, B12）是否达到AAFCO。不足时加入啤酒酵母，上限为配方重量的 2%。",
     desc_th: "ยีสต์เบียร์ครอบคลุมวิตามินบีส่วนใหญ่ ประมาณ 2% ของน้ำหนักเริ่มต้น",
+    // nutrientKey is left as vit_b1_mg only as a fallback for the per-ingredient
+    // density display in the picker; the wizard's pass/fail logic for this step
+    // uses bComplexReport() to evaluate ALL B vitamins (B1, B2, B3, B5, B6,
+    // folate, B12) against AAFCO. Choline has its own dedicated step.
     nutrientKey: "vit_b1_mg",
     kind: "vit_b_complex",
     defaults: [

@@ -26,7 +26,13 @@ import {
   suggestedProteinGrams,
   suggestedCarbGrams,
 } from "@shared/wizard";
-import { suggestRemediations, formatGrams } from "@shared/gapSuggester";
+import {
+  suggestRemediations,
+  formatGrams,
+  bComplexReport,
+  B_VITAMIN_KEYS,
+  type BComplexReport,
+} from "@shared/gapSuggester";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -483,7 +489,31 @@ function NutrientStepCard({
   const targetRow = step.nutrientKey
     ? aafco.find((r) => r.nutrient.key === step.nutrientKey)
     : null;
-  const stepDone = targetRow?.status === "ok";
+
+  // ---- Multi B-vitamin handling ------------------------------------------
+  // For the dedicated B-complex step we don't grade success on a single
+  // nutrient (B1) anymore — we evaluate ALL B vitamins (B1, B2, B3/niacin,
+  // B5, B6, folate, B12). Choline has its own wizard step.
+  const isBComplexStep = step.kind === "vit_b_complex";
+  const totalRecipe_g = items.reduce((s, i) => s + i.grams, 0);
+  const totalDM_g = Math.max(totalRecipe_g - totals.water_g, 0);
+  const bReport: BComplexReport | null = isBComplexStep
+    ? bComplexReport(aafco, totalDM_g, totalRecipe_g || startingVolume)
+    : null;
+
+  const stepDone = isBComplexStep ? !!bReport?.allMet : targetRow?.status === "ok";
+
+  // When this is the B-complex step and the picked ingredient is brewer's yeast,
+  // pre-fill the suggested grams with the report's recommendation (capped at 2%).
+  useEffect(() => {
+    if (!isBComplexStep || !bReport) return;
+    if (pickedId !== 157) return; // only brewer's yeast
+    const next = Math.round(bReport.recommendedYeastGrams * 10) / 10;
+    if (next > 0 && Math.abs(next - grams) > 0.05) {
+      setGrams(next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBComplexStep, pickedId, bReport?.recommendedYeastGrams]);
 
   const inRecipe = items.find((i) => i.ingredientId === pickedId);
 
@@ -706,8 +736,13 @@ function NutrientStepCard({
         </ScrollArea>
       </div>
 
-      {/* Live progress on this nutrient */}
-      {targetRow && (
+      {/* Live B-vitamin status — only on the B-complex step */}
+      {isBComplexStep && bReport && (
+        <BVitaminPanel report={bReport} lang={lang} />
+      )}
+
+      {/* Live progress on this nutrient (single-nutrient steps only) */}
+      {!isBComplexStep && targetRow && (
         <div className="rounded-md border border-border p-3 bg-card">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
             {nutrientLabelByKey(targetRow.nutrient.key, lang)} · {targetRow.nutrient.unit}
@@ -1135,6 +1170,141 @@ function SaveDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============================================================================
+// B-vitamin status panel (used inside NutrientStepCard for the B-complex step)
+// ============================================================================
+
+function BVitaminPanel({
+  report,
+  lang,
+}: {
+  report: BComplexReport;
+  lang: "en" | "zh" | "th";
+}) {
+  const headerLabel =
+    lang === "zh"
+      ? "B族维生素状态"
+      : lang === "th"
+        ? "สถานะวิตามินบีรวม"
+        : "B-vitamin status";
+  const subLabel = report.allMet
+    ? lang === "zh"
+      ? "全部B族维生素已达标"
+      : lang === "th"
+        ? "วิตามินบีรวมผ่านเกณฑ์ครบถ้วน"
+        : "All B vitamins meet AAFCO"
+    : lang === "zh"
+      ? `${report.belowCount} 个B维生素不足`
+      : lang === "th"
+        ? `${report.belowCount} ตัวต่ำกว่าเกณฑ์`
+        : `${report.belowCount} below AAFCO min`;
+
+  const yeastLine = !report.allMet
+    ? lang === "zh"
+      ? `推荐加入啤酒酵母 ${report.recommendedYeastGrams.toFixed(1)} g（上限 ${report.yeastCap_g.toFixed(1)} g — 配方重量的 2%）`
+      : lang === "th"
+        ? `แนะนำยีสต์เบียร์ ${report.recommendedYeastGrams.toFixed(1)} ก. (สูงสุด ${report.yeastCap_g.toFixed(1)} ก. — 2% ของน้ำหนักสูตร)`
+        : `Add brewer's yeast ≈ ${report.recommendedYeastGrams.toFixed(1)} g (max ${report.yeastCap_g.toFixed(1)} g — 2% of recipe weight)`
+    : null;
+
+  return (
+    <div className="rounded-md border border-border bg-card overflow-hidden">
+      <div className="px-3 py-2 flex items-center justify-between border-b border-border bg-secondary/40">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+          {headerLabel}
+        </div>
+        <div
+          className={`text-xs font-medium ${
+            report.allMet ? "text-emerald-700" : "text-red-700"
+          }`}
+        >
+          {subLabel}
+        </div>
+      </div>
+      <ul className="divide-y divide-border">
+        {report.perVitamin.map((v) => {
+          const isBad = v.status === "below" || v.status === "borderline";
+          const isOk = v.status === "ok";
+          const rowClass = isBad
+            ? "bg-red-50/60"
+            : isOk
+              ? "bg-emerald-50/40"
+              : "";
+          const statusText = isOk
+            ? lang === "zh"
+              ? "达标"
+              : lang === "th"
+                ? "ผ่าน"
+                : "ok"
+            : v.status === "below"
+              ? lang === "zh"
+                ? "不足"
+                : lang === "th"
+                  ? "ต่ำกว่า"
+                  : "below"
+              : v.status === "borderline"
+                ? lang === "zh"
+                  ? "边缘"
+                  : lang === "th"
+                    ? "ใกล้"
+                    : "close"
+                : v.status === "above"
+                  ? lang === "zh"
+                    ? "偏高"
+                    : lang === "th"
+                      ? "สูง"
+                      : "above"
+                  : "—";
+          const statusColorClass = isOk
+            ? "text-emerald-700"
+            : v.status === "below"
+              ? "text-red-700"
+              : v.status === "borderline"
+                ? "text-amber-700"
+                : v.status === "above"
+                  ? "text-orange-700"
+                  : "text-muted-foreground";
+          return (
+            <li
+              key={v.key}
+              className={`px-3 py-1.5 flex items-center justify-between gap-2 text-xs ${rowClass}`}
+            >
+              <div className="flex-1 min-w-0">
+                {nutrientLabelByKey(v.key, lang)}
+              </div>
+              <div
+                data-numeric="true"
+                className="text-muted-foreground tabular-nums whitespace-nowrap"
+              >
+                {v.row
+                  ? `${v.row.perKgDM.toFixed(2)} / min ${v.row.min ?? "—"} ${v.row.nutrient.unit.replace("/kg DM", "")}`
+                  : "no benchmark"}
+              </div>
+              <div className={`w-12 text-right font-medium ${statusColorClass}`}>
+                {statusText}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {yeastLine && (
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border bg-amber-50/40">
+          {yeastLine}
+          {report.cappedAt2Pct && (
+            <span className="ml-1 text-amber-700">
+              {lang === "zh"
+                ? "· 2%上限不足以完全弥补，考虑加入动物肝脓或鲑鱼。"
+                : lang === "th"
+                  ? "· ไม่พอที่จะปิดช่องว่างได้หมดด้วยยีสต์ พิจารณาตับสัตว์ หรือปลาซาร์ดีน"
+                  : "· The 2% cap may not fully close all gaps; consider adding organ meat (liver) or sardines as well."}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
