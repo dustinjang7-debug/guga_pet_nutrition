@@ -112,18 +112,21 @@ export function SummaryCard({
         <Metric label={t("moisture", lang)} value={`${macros.moisturePct.toFixed(1)}%`} />
       </div>
 
-      {/* Macro % — dry-matter basis (primary) + ME basis (secondary) */}
+      {/* Guaranteed-analysis-style label (DM basis) */}
       <div className="pt-3 border-t border-border/60">
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-          {lang === "zh" ? "宏量 % (干物质)" : lang === "th" ? "สารอาหารหลัก % (วัตถุแห้ง)" : "Macros % (Dry matter)"}
+          {lang === "zh" ? "保证成分分析 (干物质)" : lang === "th" ? "การวิเคราะห์รับรอง (DM)" : "Guaranteed analysis (DM basis)"}
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Metric label={lang === "zh" ? "蛋白质" : lang === "th" ? "โปรตีน" : "Protein"} value={`${macros.proteinPct_DM.toFixed(1)}%`} />
-          <Metric label={lang === "zh" ? "脂肪" : lang === "th" ? "ไขมัน" : "Fat"} value={`${macros.fatPct_DM.toFixed(1)}%`} />
-          <Metric label={lang === "zh" ? "碳水" : lang === "th" ? "คาร์บ" : "Carbs"} value={`${macros.carbPct_DM.toFixed(1)}%`} />
+        <div className="grid grid-cols-3 gap-x-3 gap-y-2">
+          <GAStat label={lang === "zh" ? "蛋白质" : lang === "th" ? "โปรตีน" : "Protein"} value={macros.proteinPct_DM} />
+          <GAStat label={lang === "zh" ? "脂肪" : lang === "th" ? "ไขมัน" : "Fat"} value={macros.fatPct_DM} />
+          <GAStat label={lang === "zh" ? "碳水 (NFE)" : lang === "th" ? "คาร์บ (NFE)" : "Carbs (NFE)"} value={macros.carbPct_DM} />
+          <GAStat label={lang === "zh" ? "粗纤维" : lang === "th" ? "กากใย" : "Crude fiber"} value={macros.fiberPct_DM} dim />
+          <GAStat label={lang === "zh" ? "灰分" : lang === "th" ? "เถ้า" : "Ash (approx.)"} value={macros.ashPct_DM} dim />
+          <GAStat label={lang === "zh" ? "水分" : lang === "th" ? "ความชื้น" : "Moisture"} value={macros.moisturePct} dim />
         </div>
-        <div className="mt-2 text-[10px] text-muted-foreground" data-numeric="true">
-          ME: P {macros.proteinPct_ME.toFixed(1)}% · F {macros.fatPct_ME.toFixed(1)}% · C {macros.carbPct_ME.toFixed(1)}%
+        <div className="mt-2 text-[10px] text-muted-foreground">
+          {lang === "zh" ? "碳水以 NFE 推算；灰分 ≈ 100 − P − F − 碳水 − 纤维" : lang === "th" ? "คาร์บคำนวณแบบ NFE · Ash ≈ 100 − P − F − Carb − Fiber" : "Carbs by NFE difference · Ash ≈ 100 − P − F − Carb − Fiber"}
         </div>
       </div>
 
@@ -154,6 +157,20 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div data-numeric="true" className={`text-lg ${accent ? "text-primary font-semibold" : "font-medium"} mt-0.5`}>
         {value}
+      </div>
+    </div>
+  );
+}
+
+function GAStat({ label, value, dim }: { label: string; value: number; dim?: boolean }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div
+        data-numeric="true"
+        className={`text-base mt-0.5 ${dim ? "text-muted-foreground" : "font-semibold"}`}
+      >
+        {value.toFixed(1)}%
       </div>
     </div>
   );

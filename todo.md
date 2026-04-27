@@ -157,3 +157,10 @@
 - [x] Surface action on Current Recipe card in Simple Composer (RecipeBuilder)
 - [x] Surface action on Current Recipe card in Wizard (RecipeSoFar)
 - [x] Off-target indicator (amber total + filled button) when total ≠ startingVolume
+
+## v0.3.7 — Guaranteed-analysis label
+
+- [x] Remove ME% line from expanded SummaryCard
+- [x] Add guaranteed-analysis panel (Protein / Fat / Carb NFE / Crude fiber / Ash approx / Moisture) on DM basis
+- [x] Keep collapsed view as P/F/C DM% only
+- [x] Extend RecipeMacros with fiberPct_DM + ashPct_DM (derived) + absolute grams

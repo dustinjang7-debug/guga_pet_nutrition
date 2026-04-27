@@ -104,10 +104,18 @@ export interface RecipeMacros {
   proteinPct_DM: number;
   fatPct_DM: number;
   carbPct_DM: number;
+  fiberPct_DM: number;
+  /** Derived ash/other = 100 - P - F - carb - fiber (DM basis). Clamped at 0. */
+  ashPct_DM: number;
   /** Macro % on ME basis. */
   proteinPct_ME: number;
   fatPct_ME: number;
   carbPct_ME: number;
+  /** Absolute grams (useful for guaranteed-analysis label display). */
+  protein_g: number;
+  fat_g: number;
+  carb_g: number;
+  fiber_g: number;
 }
 
 export function recipeMacros(items: RecipeItem[], totals: NutrientTotals): RecipeMacros {
@@ -121,6 +129,8 @@ export function recipeMacros(items: RecipeItem[], totals: NutrientTotals): Recip
   const proteinDM = totalDM > 0 ? (totals.protein_g / totalDM) * 100 : 0;
   const fatDM = totalDM > 0 ? (totals.fat_g / totalDM) * 100 : 0;
   const carbDM = totalDM > 0 ? (totals.carb_g / totalDM) * 100 : 0;
+  const fiberDM = totalDM > 0 ? (totals.fiber_g / totalDM) * 100 : 0;
+  const ashDM = Math.max(0, 100 - proteinDM - fatDM - carbDM - fiberDM);
 
   const pKcal = totals.protein_g * ATWATER.protein;
   const fKcal = totals.fat_g * ATWATER.fat;
@@ -140,9 +150,15 @@ export function recipeMacros(items: RecipeItem[], totals: NutrientTotals): Recip
     proteinPct_DM: proteinDM,
     fatPct_DM: fatDM,
     carbPct_DM: carbDM,
+    fiberPct_DM: fiberDM,
+    ashPct_DM: ashDM,
     proteinPct_ME: proteinME,
     fatPct_ME: fatME,
     carbPct_ME: carbME,
+    protein_g: totals.protein_g,
+    fat_g: totals.fat_g,
+    carb_g: totals.carb_g,
+    fiber_g: totals.fiber_g,
   };
 }
 
