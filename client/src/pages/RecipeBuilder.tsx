@@ -123,7 +123,7 @@ export default function RecipeBuilder() {
     onSuccess: (data) => {
       utils.recipes.list.invalidate();
       toast.success(t("save_recipe", lang) + " ✓");
-      navigate(`/recipes/${data.id}`);
+      navigate(`/recipe/${data.id}`);
     },
     onError: (e) => toast.error(e.message),
   });

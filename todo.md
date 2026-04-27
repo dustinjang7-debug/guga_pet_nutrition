@@ -141,3 +141,7 @@
 - [x] Column order on step screens (left → right): Summary (collapsed) + Current Recipe (open) | Ingredient Picker | AAFCO compliance panel
 - [x] Left rail: Summary collapsed by default
 - [x] Left rail: Current Recipe panel rendered open directly below Summary
+
+## v0.3.4 — Simple Composer save bug
+
+- [x] Fix 404 after save: navigate target was /recipes/:id (plural) but route is /recipe/:id (singular)
