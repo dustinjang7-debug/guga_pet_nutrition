@@ -87,9 +87,15 @@ export function SummaryCard({
               <span data-numeric="true" className="text-foreground font-medium">{macros.totalKcal.toFixed(0)}</span> kcal
               {" · "}
               <span data-numeric="true" className="text-foreground">{daily.feedingGrams.toFixed(0)}</span> g/day
-              {ratio && ratio.ratio !== null && (
-                <span className="ml-2">· Ca:P <span data-numeric="true" className="text-foreground">{ratio.ratio.toFixed(2)}</span></span>
-              )}
+              <div className="mt-1 flex items-center gap-3 text-xs">
+                <span>P <span data-numeric="true" className="text-foreground font-medium">{macros.proteinPct_DM.toFixed(1)}%</span></span>
+                <span>F <span data-numeric="true" className="text-foreground font-medium">{macros.fatPct_DM.toFixed(1)}%</span></span>
+                <span>C <span data-numeric="true" className="text-foreground font-medium">{macros.carbPct_DM.toFixed(1)}%</span></span>
+                <span className="text-muted-foreground/70">DM</span>
+                {ratio && ratio.status !== "empty" && (
+                  <span>Ca:P <span data-numeric="true" className="text-foreground">{ratio.ratio.toFixed(2)}</span></span>
+                )}
+              </div>
             </>
           ) : (
             <span className="italic">{lang === "zh" ? "点击展开查看总重 / 热量 / 每日建议" : lang === "th" ? "คลิกเพื่อดูน้ำหนักรวม / แคลอรี่ / ต่อวัน" : "Click to view total weight / kcal / per-day"}</span>
@@ -104,6 +110,21 @@ export function SummaryCard({
         <Metric label={t("total_kcal", lang)} value={`${macros.totalKcal.toFixed(0)} kcal`} />
         <Metric label={t("energy_density", lang)} value={`${macros.energyDensity_kcal_per_g.toFixed(2)} kcal/g`} />
         <Metric label={t("moisture", lang)} value={`${macros.moisturePct.toFixed(1)}%`} />
+      </div>
+
+      {/* Macro % — dry-matter basis (primary) + ME basis (secondary) */}
+      <div className="pt-3 border-t border-border/60">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+          {lang === "zh" ? "宏量 % (干物质)" : lang === "th" ? "สารอาหารหลัก % (วัตถุแห้ง)" : "Macros % (Dry matter)"}
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Metric label={lang === "zh" ? "蛋白质" : lang === "th" ? "โปรตีน" : "Protein"} value={`${macros.proteinPct_DM.toFixed(1)}%`} />
+          <Metric label={lang === "zh" ? "脂肪" : lang === "th" ? "ไขมัน" : "Fat"} value={`${macros.fatPct_DM.toFixed(1)}%`} />
+          <Metric label={lang === "zh" ? "碳水" : lang === "th" ? "คาร์บ" : "Carbs"} value={`${macros.carbPct_DM.toFixed(1)}%`} />
+        </div>
+        <div className="mt-2 text-[10px] text-muted-foreground" data-numeric="true">
+          ME: P {macros.proteinPct_ME.toFixed(1)}% · F {macros.fatPct_ME.toFixed(1)}% · C {macros.carbPct_ME.toFixed(1)}%
+        </div>
       </div>
 
       <div className="pt-3 border-t border-border/60 grid grid-cols-2 gap-3">

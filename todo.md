@@ -145,3 +145,8 @@
 ## v0.3.4 — Simple Composer save bug
 
 - [x] Fix 404 after save: navigate target was /recipes/:id (plural) but route is /recipe/:id (singular)
+
+## v0.3.5 — SummaryCard P/F/C% visibility
+
+- [x] Show P/F/C% in collapsed one-line (DM basis, small label)
+- [x] Show P/F/C% as 3-col grid in expanded body, with ME-basis line underneath
