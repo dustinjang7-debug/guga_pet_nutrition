@@ -38,7 +38,7 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Check, ChevronRight, FlaskConical, Leaf,
-  ListChecks, Loader2, Pencil, Save, Search, Sparkles, X,
+  ListChecks, Loader2, Maximize2, Pencil, Save, Search, Sparkles, X,
 } from "lucide-react";
 
 import {
@@ -222,6 +222,15 @@ export default function WizardPage() {
     });
   }
 
+  function scaleToVolume() {
+    setItems((prev) => {
+      const total = prev.reduce((s, p) => s + p.grams, 0);
+      if (total <= 0 || startingVolume <= 0) return prev;
+      const factor = startingVolume / total;
+      return prev.map((p) => ({ ...p, grams: Math.round(p.grams * factor * 10) / 10 }));
+    });
+  }
+
   // ----- Step navigation -----------------------------------------------------
   const isSetup = phase === "setup";
   const isComplianceStep = !isSetup && stepIdx >= COMPLIANCE_INDEX;
@@ -287,6 +296,8 @@ export default function WizardPage() {
                   items={items}
                   onSetGrams={setItemGrams}
                   onRemove={(id) => setItems((p) => p.filter((i) => i.ingredientId !== id))}
+                  onScaleToVolume={scaleToVolume}
+                  startingVolume={startingVolume}
                 />
               </div>
 
@@ -1170,10 +1181,14 @@ function RecipeSoFar({
   items,
   onSetGrams,
   onRemove,
+  onScaleToVolume,
+  startingVolume,
 }: {
   items: RecipeItem[];
   onSetGrams: (id: number, g: number) => void;
   onRemove: (id: number) => void;
+  onScaleToVolume?: () => void;
+  startingVolume?: number;
 }) {
   const [lang] = useLang();
   if (items.length === 0) {
@@ -1183,14 +1198,41 @@ function RecipeSoFar({
       </Card>
     );
   }
+  const total = items.reduce((s, i) => s + i.grams, 0);
+  const offTarget =
+    onScaleToVolume && startingVolume && startingVolume > 0
+      ? Math.abs(total - startingVolume) >= 1
+      : false;
+  const scaleLabel =
+    lang === "zh" ? `缩放至 ${startingVolume?.toFixed(0)}g`
+      : lang === "th" ? `ปรับเป็น ${startingVolume?.toFixed(0)}g`
+      : `Scale to ${startingVolume?.toFixed(0)}g`;
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 gap-2">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">
           {t("current_recipe", lang)}
         </div>
-        <div className="text-xs text-muted-foreground">
-          {items.length} {t("ingredients_count", lang)}
+        <div className="flex items-center gap-2">
+          <span
+            data-numeric="true"
+            className={`text-xs ${offTarget ? "text-amber-700 font-medium" : "text-muted-foreground"}`}
+          >
+            {items.length} {t("ingredients_count", lang)} · {total.toFixed(0)} g
+          </span>
+          {onScaleToVolume && startingVolume && startingVolume > 0 && (
+            <Button
+              variant={offTarget ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2 text-xs gap-1"
+              onClick={onScaleToVolume}
+              disabled={total === 0}
+              title={scaleLabel}
+            >
+              <Maximize2 className="size-3.5" />
+              <span className="hidden xl:inline">{scaleLabel}</span>
+            </Button>
+          )}
         </div>
       </div>
       <div className="divide-y divide-border">

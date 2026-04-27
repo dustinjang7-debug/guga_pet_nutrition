@@ -1,19 +1,26 @@
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ingredientName, type Lang, t } from "@/lib/i18n";
 import type { RecipeItem } from "@shared/calc";
 import { INGREDIENT_BY_ID } from "@shared/ingredients";
-import { Trash2 } from "lucide-react";
+import { Maximize2, Trash2 } from "lucide-react";
 
 export function RecipeItemsList({
   items,
   onChangeGrams,
   onRemove,
+  onScaleToVolume,
+  startingVolume,
   lang,
 }: {
   items: RecipeItem[];
   onChangeGrams: (ingredientId: number, grams: number) => void;
   onRemove: (ingredientId: number) => void;
+  /** When provided, shows a "Scale to volume" button to proportionally rescale all items so total = startingVolume. */
+  onScaleToVolume?: () => void;
+  /** Target volume to display in the scale button label. */
+  startingVolume?: number;
   lang: Lang;
 }) {
   if (items.length === 0) {
@@ -25,16 +32,43 @@ export function RecipeItemsList({
   }
 
   const total = items.reduce((s, i) => s + i.grams, 0);
+  const offTarget =
+    onScaleToVolume && startingVolume && startingVolume > 0
+      ? Math.abs(total - startingVolume) >= 1
+      : false;
+
+  const scaleLabel =
+    lang === "zh" ? `缩放至 ${startingVolume?.toFixed(0)}g`
+      : lang === "th" ? `ปรับเป็น ${startingVolume?.toFixed(0)}g`
+      : `Scale to ${startingVolume?.toFixed(0)}g`;
 
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between">
+      <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between gap-3">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
           {t("current_recipe", lang)}
         </h2>
-        <span data-numeric="true" className="text-xs text-muted-foreground">
-          {items.length} {t("ingredients_count", lang)} · {total.toFixed(0)} g
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            data-numeric="true"
+            className={`text-xs ${offTarget ? "text-amber-700 font-medium" : "text-muted-foreground"}`}
+          >
+            {items.length} {t("ingredients_count", lang)} · {total.toFixed(0)} g
+          </span>
+          {onScaleToVolume && startingVolume && startingVolume > 0 && (
+            <Button
+              variant={offTarget ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2 text-xs gap-1"
+              onClick={onScaleToVolume}
+              disabled={total === 0}
+              title={scaleLabel}
+            >
+              <Maximize2 className="size-3.5" />
+              <span className="hidden sm:inline">{scaleLabel}</span>
+            </Button>
+          )}
+        </div>
       </div>
       <div className="divide-y divide-border/60">
         {items.map((item) => {

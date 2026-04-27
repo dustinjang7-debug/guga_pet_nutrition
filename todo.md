@@ -150,3 +150,10 @@
 
 - [x] Show P/F/C% in collapsed one-line (DM basis, small label)
 - [x] Show P/F/C% as 3-col grid in expanded body, with ME-basis line underneath
+
+## v0.3.6 — Scale to starting volume
+
+- [x] Add proportional scale-to-volume action that rescales all items so total = startingVolume
+- [x] Surface action on Current Recipe card in Simple Composer (RecipeBuilder)
+- [x] Surface action on Current Recipe card in Wizard (RecipeSoFar)
+- [x] Off-target indicator (amber total + filled button) when total ≠ startingVolume

@@ -113,6 +113,14 @@ export default function RecipeBuilder() {
   function changeGrams(ingredientId: number, grams: number) {
     setItems((prev) => prev.map((p) => (p.ingredientId === ingredientId ? { ...p, grams } : p)));
   }
+  function scaleToVolume() {
+    setItems((prev) => {
+      const total = prev.reduce((s, p) => s + p.grams, 0);
+      if (total <= 0 || startingVolume <= 0) return prev;
+      const factor = startingVolume / total;
+      return prev.map((p) => ({ ...p, grams: Math.round(p.grams * factor * 10) / 10 }));
+    });
+  }
   function removeItem(ingredientId: number) {
     setItems((prev) => prev.filter((p) => p.ingredientId !== ingredientId));
   }
@@ -259,7 +267,14 @@ export default function RecipeBuilder() {
               isGrowth={isGrowth}
               lang={lang}
             />
-            <RecipeItemsList items={items} onChangeGrams={changeGrams} onRemove={removeItem} lang={lang} />
+            <RecipeItemsList
+              items={items}
+              onChangeGrams={changeGrams}
+              onRemove={removeItem}
+              onScaleToVolume={scaleToVolume}
+              startingVolume={startingVolume}
+              lang={lang}
+            />
           </div>
 
           {/* Center: picker only (sticky on lg+) */}
