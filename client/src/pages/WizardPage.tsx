@@ -38,8 +38,10 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, Check, ChevronRight, FlaskConical, Leaf,
-  ListChecks, Loader2, Maximize2, Pencil, Save, Search, Sparkles, X,
+  ListChecks, Loader2, Lock, Maximize2, Pencil, Save, Search, Sparkles,
+  Unlock, X,
 } from "lucide-react";
+import { rebalanceByPct } from "@shared/rebalance";
 
 import {
   PetProfilePane, defaultPetProfile, type PetProfileState,
@@ -71,6 +73,7 @@ export default function WizardPage() {
   const [pet, setPet] = useState<PetProfileState>(defaultPetProfile());
   const [startingVolume, setStartingVolume] = useState(1000);
   const [items, setItems] = useState<RecipeItem[]>([]);
+  const [locks, setLocks] = useState<Set<number>>(new Set());
   const [stepIdx, setStepIdx] = useState<StepIndex>(0);
   // -1 = setup phase (pet profile + starting volume); 0..N = step screens.
   // Editing an existing recipe skips setup; new recipes start in setup.
@@ -222,12 +225,21 @@ export default function WizardPage() {
     });
   }
 
-  function scaleToVolume() {
-    setItems((prev) => {
-      const total = prev.reduce((s, p) => s + p.grams, 0);
-      if (total <= 0 || startingVolume <= 0) return prev;
-      const factor = startingVolume / total;
-      return prev.map((p) => ({ ...p, grams: Math.round(p.grams * factor * 10) / 10 }));
+  function toggleLock(ingredientId: number) {
+    setLocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(ingredientId)) next.delete(ingredientId);
+      else next.add(ingredientId);
+      return next;
+    });
+  }
+  function removeItemAndLock(ingredientId: number) {
+    setItems((p) => p.filter((i) => i.ingredientId !== ingredientId));
+    setLocks((prev) => {
+      if (!prev.has(ingredientId)) return prev;
+      const next = new Set(prev);
+      next.delete(ingredientId);
+      return next;
     });
   }
 
@@ -294,10 +306,10 @@ export default function WizardPage() {
                 />
                 <RecipeSoFar
                   items={items}
-                  onSetGrams={setItemGrams}
-                  onRemove={(id) => setItems((p) => p.filter((i) => i.ingredientId !== id))}
-                  onScaleToVolume={scaleToVolume}
-                  startingVolume={startingVolume}
+                  locks={locks}
+                  onItemsChange={setItems}
+                  onToggleLock={toggleLock}
+                  onRemove={removeItemAndLock}
                 />
               </div>
 
@@ -1179,16 +1191,16 @@ function GapRow({
 
 function RecipeSoFar({
   items,
-  onSetGrams,
+  locks,
+  onItemsChange,
+  onToggleLock,
   onRemove,
-  onScaleToVolume,
-  startingVolume,
 }: {
   items: RecipeItem[];
-  onSetGrams: (id: number, g: number) => void;
+  locks: Set<number>;
+  onItemsChange: (next: RecipeItem[]) => void;
+  onToggleLock: (id: number) => void;
   onRemove: (id: number) => void;
-  onScaleToVolume?: () => void;
-  startingVolume?: number;
 }) {
   const [lang] = useLang();
   if (items.length === 0) {
@@ -1199,61 +1211,70 @@ function RecipeSoFar({
     );
   }
   const total = items.reduce((s, i) => s + i.grams, 0);
-  const offTarget =
-    onScaleToVolume && startingVolume && startingVolume > 0
-      ? Math.abs(total - startingVolume) >= 1
-      : false;
-  const scaleLabel =
-    lang === "zh" ? `缩放至 ${startingVolume?.toFixed(0)}g`
-      : lang === "th" ? `ปรับเป็น ${startingVolume?.toFixed(0)}g`
-      : `Scale to ${startingVolume?.toFixed(0)}g`;
+
+  function handlePctChange(ingredientId: number, raw: string) {
+    const pct = parseFloat(raw);
+    if (Number.isNaN(pct)) return;
+    const annotated = items.map((i) => ({
+      ingredientId: i.ingredientId,
+      grams: i.grams,
+      locked: locks.has(i.ingredientId),
+    }));
+    const next = rebalanceByPct(annotated, ingredientId, pct);
+    onItemsChange(next.map(({ ingredientId, grams }) => ({ ingredientId, grams })));
+  }
+
   return (
     <Card className="p-5">
-      <div className="flex items-center justify-between mb-2 gap-2">
+      <div className="flex items-center justify-between mb-1 gap-2">
         <div className="text-xs uppercase tracking-wider text-muted-foreground">
           {t("current_recipe", lang)}
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            data-numeric="true"
-            className={`text-xs ${offTarget ? "text-amber-700 font-medium" : "text-muted-foreground"}`}
-          >
-            {items.length} {t("ingredients_count", lang)} · {total.toFixed(0)} g
-          </span>
-          {onScaleToVolume && startingVolume && startingVolume > 0 && (
-            <Button
-              variant={offTarget ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-2 text-xs gap-1"
-              onClick={onScaleToVolume}
-              disabled={total === 0}
-              title={scaleLabel}
-            >
-              <Maximize2 className="size-3.5" />
-              <span className="hidden xl:inline">{scaleLabel}</span>
-            </Button>
-          )}
-        </div>
+        <span data-numeric="true" className="text-xs text-muted-foreground">
+          {items.length} {t("ingredients_count", lang)} · {t("total_label", lang)} {total.toFixed(0)} g
+        </span>
       </div>
+      <p className="text-[11px] text-muted-foreground mb-2">{t("rebalance_hint", lang)}</p>
       <div className="divide-y divide-border">
         {items.map((it) => {
           const ing = INGREDIENT_BY_ID[it.ingredientId];
           if (!ing) return null;
+          const pct = total > 0 ? (it.grams / total) * 100 : 0;
+          const isLocked = locks.has(it.ingredientId);
           return (
-            <div key={it.ingredientId} className="flex items-center gap-2 py-2">
+            <div
+              key={it.ingredientId}
+              className={`flex items-center gap-2 py-2 ${isLocked ? "bg-amber-50/40 -mx-1 px-1 rounded" : ""}`}
+            >
+              <button
+                onClick={() => onToggleLock(it.ingredientId)}
+                title={isLocked ? t("unlock_row", lang) : t("lock_row", lang)}
+                className={`size-7 flex items-center justify-center rounded-md transition-colors shrink-0 ${
+                  isLocked
+                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                    : "text-muted-foreground hover:bg-secondary"
+                }`}
+              >
+                {isLocked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5" />}
+              </button>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-sm truncate">{ingredientName(ing, lang)}</div>
-                <div className="text-[11px] text-muted-foreground truncate">{ing.category}</div>
+                <div className="text-[11px] text-muted-foreground truncate">
+                  {ing.category} · {it.grams.toFixed(0)} g
+                </div>
               </div>
               <Input
                 type="number"
-                value={it.grams}
-                onChange={(e) => onSetGrams(it.ingredientId, parseFloat(e.target.value || "0"))}
+                value={pct.toFixed(1)}
+                onChange={(e) => handlePctChange(it.ingredientId, e.target.value)}
                 step={0.5}
+                min={0}
+                max={100}
                 className="w-20 h-8 text-right"
                 data-numeric="true"
+                disabled={isLocked}
               />
-              <span className="text-xs text-muted-foreground">g</span>
+              <span className="text-xs text-muted-foreground">%</span>
               <Button
                 variant="ghost"
                 size="icon"
