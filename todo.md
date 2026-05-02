@@ -164,3 +164,35 @@
 - [x] Add guaranteed-analysis panel (Protein / Fat / Carb NFE / Crude fiber / Ash approx / Moisture) on DM basis
 - [x] Keep collapsed view as P/F/C DM% only
 - [x] Extend RecipeMacros with fiberPct_DM + ashPct_DM (derived) + absolute grams
+
+## v0.3.8 — Recipe page load bug
+
+- [ ] Recipe page can't load after v0.3.7 SummaryCard/RecipeMacros changes
+
+## v0.4.0 — Current Recipe % rebalance (Simple Composer)
+
+- [x] Add `shared/rebalance.ts` (pure helper) with lock/unlock pro-rata logic
+- [x] 8 vitest cases for rebalance edge cases (locked rows, slack clamp, zero unlocked, negative pct)
+- [x] Replace gram input with % input in RecipeItemsList; per-row lock toggle
+- [x] Remove Scale-to-volume button from Simple Composer (% mode preserves total)
+- [x] Wizard RecipeSoFar untouched (still grams)
+- [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
+
+## v0.4.1 — Replace Manus OAuth with email+password auth (deferred)
+
+- [ ] Add `passwordHash` + `email` (unique) columns to `users` table and migrate
+- [ ] Backend: `auth.signup` and `auth.login` tRPC procedures using bcrypt + JWT cookie
+- [ ] Preserve existing `auth.me` + `auth.logout` flow
+- [ ] Rip out Manus OAuth callback route + `getLoginUrl` redirect
+- [ ] New Login page: email + password form (signup link for first-time)
+- [ ] Seed GUGA owner account (Disk) with a temporary password via migration script
+- [ ] Vitest coverage: signup, login, wrong-password rejection, session round-trip
+- [ ] Update README snippet about auth
+
+## Replit migration handoff
+
+- [ ] Inventory Manus-specific dependencies (OAuth, env, context, storage, LLM, notification, forge)
+- [ ] Write REPLIT_HANDOFF.md prompt covering architecture, what to keep, what to replace
+- [ ] Package source snapshot (zip) excluding node_modules, .env, .manus-logs
+- [ ] Deliver both to user
+

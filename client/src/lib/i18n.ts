@@ -116,6 +116,11 @@ const DICT = {
     recipe_empty: "No ingredients yet. Add your first one from the picker.",
     current_recipe: "Current recipe",
     ingredients_count: "ingredients",
+    lock_row: "Lock",
+    unlock_row: "Unlock",
+    pct_of_recipe: "% of recipe",
+    rebalance_hint: "Edit any % — locked rows hold; unlocked rows absorb the change.",
+    total_label: "Total",
 
     // Wizard setup
     wizard_setup_title: "Setup",
@@ -222,6 +227,11 @@ const DICT = {
     recipe_empty: "尚未添加食材。请从右侧选择第一种。",
     current_recipe: "当前配方",
     ingredients_count: "种",
+    lock_row: "锁定",
+    unlock_row: "解锁",
+    pct_of_recipe: "占比 %",
+    rebalance_hint: "修改任意 %，已锁定行保持不变，未锁定行按比例分摊变化。",
+    total_label: "总计",
 
     // Wizard setup
     wizard_setup_title: "初始设置",
@@ -328,6 +338,11 @@ const DICT = {
     recipe_empty: "ยังไม่มีวัตถุดิบ เลือกตัวแรกจากรายการทางขวา",
     current_recipe: "สูตรปัจจุบัน",
     ingredients_count: "รายการ",
+    lock_row: "ล็อก",
+    unlock_row: "ปลดล็อก",
+    pct_of_recipe: "% ของสูตร",
+    rebalance_hint: "แก้ % ใดก็ได้ แถวที่ล็อกจะคงที่ แถวที่ไม่ล็อกจะถูกปรับตามสัดส่วน",
+    total_label: "รวม",
 
     // Wizard setup
     wizard_setup_title: "ตั้งค่าเริ่มต้น",

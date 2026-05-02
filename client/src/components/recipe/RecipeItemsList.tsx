@@ -1,26 +1,38 @@
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ingredientName, type Lang, t } from "@/lib/i18n";
 import type { RecipeItem } from "@shared/calc";
 import { INGREDIENT_BY_ID } from "@shared/ingredients";
-import { Maximize2, Trash2 } from "lucide-react";
+import { gramsToPct, rebalanceByPct } from "@shared/rebalance";
+import { Lock, Trash2, Unlock } from "lucide-react";
 
+/**
+ * Current Recipe panel — % based.
+ *
+ * Each row shows its share of the total recipe weight. Editing a % redistributes
+ * the delta across the other unlocked rows pro-rata; locked rows hold their grams.
+ * Total weight is preserved across edits — the "Total: NNNg" badge in the header
+ * is informational only.
+ *
+ * Adding a new ingredient still happens in grams via the IngredientPicker.
+ * The added grams expand the total; existing % shares shrink proportionally.
+ */
 export function RecipeItemsList({
   items,
-  onChangeGrams,
+  locks,
+  onItemsChange,
+  onToggleLock,
   onRemove,
-  onScaleToVolume,
-  startingVolume,
   lang,
 }: {
   items: RecipeItem[];
-  onChangeGrams: (ingredientId: number, grams: number) => void;
+  /** Set of ingredientIds that are locked. */
+  locks: Set<number>;
+  /** Replace the whole items array (after a rebalance). */
+  onItemsChange: (next: RecipeItem[]) => void;
+  /** Toggle the lock state for one ingredient. */
+  onToggleLock: (ingredientId: number) => void;
   onRemove: (ingredientId: number) => void;
-  /** When provided, shows a "Scale to volume" button to proportionally rescale all items so total = startingVolume. */
-  onScaleToVolume?: () => void;
-  /** Target volume to display in the scale button label. */
-  startingVolume?: number;
   lang: Lang;
 }) {
   if (items.length === 0) {
@@ -32,71 +44,79 @@ export function RecipeItemsList({
   }
 
   const total = items.reduce((s, i) => s + i.grams, 0);
-  const offTarget =
-    onScaleToVolume && startingVolume && startingVolume > 0
-      ? Math.abs(total - startingVolume) >= 1
-      : false;
 
-  const scaleLabel =
-    lang === "zh" ? `缩放至 ${startingVolume?.toFixed(0)}g`
-      : lang === "th" ? `ปรับเป็น ${startingVolume?.toFixed(0)}g`
-      : `Scale to ${startingVolume?.toFixed(0)}g`;
+  function handlePctChange(ingredientId: number, raw: string) {
+    const pct = parseFloat(raw);
+    if (Number.isNaN(pct)) return;
+    const annotated = items.map(i => ({
+      ingredientId: i.ingredientId,
+      grams: i.grams,
+      locked: locks.has(i.ingredientId),
+    }));
+    const next = rebalanceByPct(annotated, ingredientId, pct);
+    onItemsChange(next.map(({ ingredientId, grams }) => ({ ingredientId, grams })));
+  }
 
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-5 py-3 border-b border-border/60 flex items-center justify-between gap-3">
-        <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
-          {t("current_recipe", lang)}
-        </h2>
-        <div className="flex items-center gap-2">
-          <span
-            data-numeric="true"
-            className={`text-xs ${offTarget ? "text-amber-700 font-medium" : "text-muted-foreground"}`}
-          >
-            {items.length} {t("ingredients_count", lang)} · {total.toFixed(0)} g
+      <div className="px-5 py-3 border-b border-border/60">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-display text-sm font-semibold uppercase tracking-wider">
+            {t("current_recipe", lang)}
+          </h2>
+          <span data-numeric="true" className="text-xs text-muted-foreground">
+            {items.length} {t("ingredients_count", lang)} · {t("total_label", lang)} {total.toFixed(0)} g
           </span>
-          {onScaleToVolume && startingVolume && startingVolume > 0 && (
-            <Button
-              variant={offTarget ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-2 text-xs gap-1"
-              onClick={onScaleToVolume}
-              disabled={total === 0}
-              title={scaleLabel}
-            >
-              <Maximize2 className="size-3.5" />
-              <span className="hidden sm:inline">{scaleLabel}</span>
-            </Button>
-          )}
         </div>
+        <p className="text-[11px] text-muted-foreground mt-1">{t("rebalance_hint", lang)}</p>
       </div>
+
       <div className="divide-y divide-border/60">
-        {items.map((item) => {
+        {items.map(item => {
           const ing = INGREDIENT_BY_ID[item.ingredientId];
           if (!ing) return null;
-          const pctOfTotal = total > 0 ? (item.grams / total) * 100 : 0;
+          const pct = gramsToPct(item.grams, total);
+          const isLocked = locks.has(item.ingredientId);
           return (
             <div
               key={item.ingredientId}
-              className="flex items-center gap-3 px-5 py-3 hover:bg-secondary/30 transition-colors"
+              className={`flex items-center gap-3 px-5 py-3 transition-colors ${
+                isLocked ? "bg-amber-50/40" : "hover:bg-secondary/30"
+              }`}
             >
+              <button
+                onClick={() => onToggleLock(item.ingredientId)}
+                title={isLocked ? t("unlock_row", lang) : t("lock_row", lang)}
+                className={`size-7 flex items-center justify-center rounded-md transition-colors shrink-0 ${
+                  isLocked
+                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                    : "text-muted-foreground hover:bg-secondary"
+                }`}
+              >
+                {isLocked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5" />}
+              </button>
+
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{ingredientName(ing, lang)}</div>
                 <div data-numeric="true" className="text-[11px] text-muted-foreground">
-                  {ing.category} · {pctOfTotal.toFixed(1)}% · {((item.grams / 100) * ing.energy_kcal).toFixed(0)} kcal
+                  {ing.category} · {item.grams.toFixed(0)} g · {((item.grams / 100) * ing.energy_kcal).toFixed(0)} kcal
                 </div>
               </div>
+
               <div className="flex items-center gap-1 shrink-0">
                 <Input
                   type="number"
                   min={0}
-                  step={1}
-                  value={item.grams}
+                  max={100}
+                  step={0.5}
+                  value={pct.toFixed(1)}
                   data-numeric="true"
-                  onChange={(e) => onChangeGrams(item.ingredientId, parseFloat(e.target.value) || 0)}
+                  onChange={e => handlePctChange(item.ingredientId, e.target.value)}
                   className="w-20 h-8 text-right"
+                  disabled={isLocked}
+                  title={isLocked ? t("unlock_row", lang) : t("pct_of_recipe", lang)}
                 />
-                <span className="text-xs text-muted-foreground w-4">g</span>
+                <span className="text-xs text-muted-foreground w-4">%</span>
                 <button
                   onClick={() => onRemove(item.ingredientId)}
                   className="ml-1 size-8 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors rounded-md hover:bg-destructive/10"

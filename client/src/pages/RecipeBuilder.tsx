@@ -43,6 +43,7 @@ export default function RecipeBuilder() {
 
   // Recipe state
   const [items, setItems] = useState<RecipeItem[]>([]);
+  const [locks, setLocks] = useState<Set<number>>(new Set());
   const [recipeName, setRecipeName] = useState("");
   const [notes, setNotes] = useState("");
   const [recipeStatus, setRecipeStatus] = useState<"draft" | "approved">("draft");
@@ -110,19 +111,22 @@ export default function RecipeBuilder() {
       return [...prev, { ingredientId: ing.id, grams: defaultGrams }];
     });
   }
-  function changeGrams(ingredientId: number, grams: number) {
-    setItems((prev) => prev.map((p) => (p.ingredientId === ingredientId ? { ...p, grams } : p)));
-  }
-  function scaleToVolume() {
-    setItems((prev) => {
-      const total = prev.reduce((s, p) => s + p.grams, 0);
-      if (total <= 0 || startingVolume <= 0) return prev;
-      const factor = startingVolume / total;
-      return prev.map((p) => ({ ...p, grams: Math.round(p.grams * factor * 10) / 10 }));
-    });
-  }
   function removeItem(ingredientId: number) {
     setItems((prev) => prev.filter((p) => p.ingredientId !== ingredientId));
+    setLocks((prev) => {
+      if (!prev.has(ingredientId)) return prev;
+      const next = new Set(prev);
+      next.delete(ingredientId);
+      return next;
+    });
+  }
+  function toggleLock(ingredientId: number) {
+    setLocks((prev) => {
+      const next = new Set(prev);
+      if (next.has(ingredientId)) next.delete(ingredientId);
+      else next.add(ingredientId);
+      return next;
+    });
   }
 
   // Save / update
@@ -269,10 +273,10 @@ export default function RecipeBuilder() {
             />
             <RecipeItemsList
               items={items}
-              onChangeGrams={changeGrams}
+              locks={locks}
+              onItemsChange={setItems}
+              onToggleLock={toggleLock}
               onRemove={removeItem}
-              onScaleToVolume={scaleToVolume}
-              startingVolume={startingVolume}
               lang={lang}
             />
           </div>

@@ -183,24 +183,22 @@ function RecipesList({ onNew }: { onNew: () => void }) {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {recipesQuery.data.map((r) => (
             <Card key={r.id} className="p-5 hover:shadow-md transition-shadow group flex flex-col">
-              <Link href={`/recipe/${r.id}`}>
-                <a className="flex-1 cursor-pointer">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <h3 className="font-display text-lg font-semibold leading-tight line-clamp-2">{r.name}</h3>
-                    <span className={`shrink-0 text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full ${r.status === "approved" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                      {r.status === "approved" ? t("status_approved", lang) : t("status_draft", lang)}
-                    </span>
+              <Link href={`/recipe/${r.id}`} className="flex-1 cursor-pointer">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="font-display text-lg font-semibold leading-tight line-clamp-2">{r.name}</h3>
+                  <span className={`shrink-0 text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full ${r.status === "approved" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                    {r.status === "approved" ? t("status_approved", lang) : t("status_draft", lang)}
+                  </span>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-0.5">
+                  <div>
+                    {r.species === "dog" ? t("species_dog", lang) : t("species_cat", lang)}
+                    {r.petName ? ` · ${r.petName}` : ""}
+                    {" · "}
+                    <span data-numeric="true">{Number(r.bodyWeightKg).toFixed(1)}</span> kg
                   </div>
-                  <div className="text-sm text-muted-foreground space-y-0.5">
-                    <div>
-                      {r.species === "dog" ? t("species_dog", lang) : t("species_cat", lang)}
-                      {r.petName ? ` · ${r.petName}` : ""}
-                      {" · "}
-                      <span data-numeric="true">{Number(r.bodyWeightKg).toFixed(1)}</span> kg
-                    </div>
-                    <div className="text-xs">{t("saved_at", lang)}: {new Date(r.updatedAt).toLocaleDateString()}</div>
-                  </div>
-                </a>
+                  <div className="text-xs">{t("saved_at", lang)}: {new Date(r.updatedAt).toLocaleDateString()}</div>
+                </div>
               </Link>
               <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-end">
                 <Button
