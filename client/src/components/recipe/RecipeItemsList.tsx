@@ -41,14 +41,9 @@ export function RecipeItemsList({
 }) {
   const [sortByPct, setSortByPct] = useState(false);
 
-  if (items.length === 0) {
-    return (
-      <Card className="p-8 text-center text-sm text-muted-foreground">
-        {t("recipe_empty", lang)}
-      </Card>
-    );
-  }
-
+  // All hooks MUST run unconditionally on every render — never put an early
+  // return above a hook or React #310 fires. The empty-state UI is rendered
+  // at the bottom after the hooks have all been called.
   const total = items.reduce((s, i) => s + i.grams, 0);
 
   const fixedSet = useMemo(() => new Set(fixedIds ?? []), [fixedIds]);
@@ -58,6 +53,14 @@ export function RecipeItemsList({
     if (!sortByPct) return items;
     return [...items].sort((a, b) => b.grams - a.grams);
   }, [items, sortByPct]);
+
+  if (items.length === 0) {
+    return (
+      <Card className="p-8 text-center text-sm text-muted-foreground">
+        {t("recipe_empty", lang)}
+      </Card>
+    );
+  }
 
   const allLocked = items.length > 0 && items.every(i => locks.has(i.ingredientId));
 
