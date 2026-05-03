@@ -8611,9 +8611,90 @@ export const INGREDIENTS: Ingredient[] =
     "selenium_ug": 0.0,
     "copper_mg": 0.0,
     "manganese_mg": 0.0
+  },
+  {
+    "id": 901,
+    "category": "Premix",
+    "name_en": "GUGA CatVita & Mineral Premix BASIC",
+    "name_zh": "GUGA 维生素与矿物质预混料 BASIC",
+    "name_th": "GUGA วิตามินและแร่ธาตุ พรีมิกซ์ BASIC",
+    "water_g": 0.0,
+    "energy_kcal": 0.0,
+    "protein_g": 0.0,
+    "fat_g": 0.0,
+    "carb_g": 0.0,
+    "fiber_g": 5.22,
+    "cholesterol_mg": 0.0,
+    "vit_a_re_ug": 1875.0,
+    "vit_b1_mg": 11.334,
+    "vit_b2_mg": 7.5,
+    "niacin_mg": 6.219,
+    "vit_b5_mg": 0.3063,
+    "vit_b6_mg": 3.094,
+    "folate_mg": 0.6,
+    "vit_b12_mg": 0.03125,
+    "choline_mg": 2528.4,
+    "vit_c_mg": 0.0,
+    "vit_d_ug": 31.25,
+    "vit_e_mg": 156.25,
+    "calcium_mg": 9156.2,
+    "phosphorus_mg": 3250.0,
+    "potassium_mg": 4863.0,
+    "sodium_mg": 2559.0,
+    "magnesium_mg": 459.0,
+    "iron_mg": 79.688,
+    "zinc_mg": 131.25,
+    "selenium_ug": 0.72,
+    "copper_mg": 6.5625,
+    "manganese_mg": 6.875
+  },
+  {
+    "id": 902,
+    "category": "Premix",
+    "name_en": "GUGA CatVita & Mineral Premix UPGRADE",
+    "name_zh": "GUGA 维生素与矿物质预混料 UPGRADE",
+    "name_th": "GUGA วิตามินและแร่ธาตุ พรีมิกซ์ UPGRADE",
+    "water_g": 0.0,
+    "energy_kcal": 0.0,
+    "protein_g": 0.0,
+    "fat_g": 0.0,
+    "carb_g": 0.0,
+    "fiber_g": 0.0,
+    "cholesterol_mg": 0.0,
+    "vit_a_re_ug": 1875.0,
+    "vit_b1_mg": 11.334,
+    "vit_b2_mg": 7.5,
+    "niacin_mg": 6.231,
+    "vit_b5_mg": 0.3063,
+    "vit_b6_mg": 3.094,
+    "folate_mg": 0.6012,
+    "vit_b12_mg": 0.03125,
+    "choline_mg": 3010.0,
+    "vit_c_mg": 0.0,
+    "vit_d_ug": 31.25,
+    "vit_e_mg": 156.25,
+    "calcium_mg": 9167.2,
+    "phosphorus_mg": 3256.5,
+    "potassium_mg": 4870.0,
+    "sodium_mg": 2562.8,
+    "magnesium_mg": 460.2,
+    "iron_mg": 79.836,
+    "zinc_mg": 131.25,
+    "selenium_ug": 0.288,
+    "copper_mg": 5.26,
+    "manganese_mg": 6.888
   }
 ]
 ;
+
+/** Hardcoded ingredient IDs for the GUGA premixes. Used by Premix Composer. */
+export const PREMIX_BASIC_ID = 901;
+export const PREMIX_UPGRADE_ID = 902;
+export const PREMIX_IDS = [PREMIX_BASIC_ID, PREMIX_UPGRADE_ID] as const;
+
+export function isPremix(id: number): boolean {
+  return PREMIX_IDS.includes(id as typeof PREMIX_IDS[number]);
+}
 
 export const INGREDIENT_BY_ID: Record<number, Ingredient> = Object.fromEntries(
   INGREDIENTS.map(i => [i.id, i])

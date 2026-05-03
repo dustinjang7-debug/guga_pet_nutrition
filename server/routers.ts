@@ -27,7 +27,7 @@ const recipeInputSchema = z.object({
   bodyWeightKg: z.number().positive().max(200),
   lifeStageFactor: z.number().positive().max(10),
   feedingMode: z.enum(["normal", "weight_loss"]).default("normal"),
-  workflow: z.enum(["wizard", "simple"]).default("simple"),
+  workflow: z.enum(["wizard", "simple", "premix"]).default("simple"),
   startingVolumeG: z.number().int().positive().max(100000).default(1000),
   targetProteinPct: z.number().min(0).max(100).nullish(),
   targetCarbPct: z.number().min(0).max(100).nullish(),

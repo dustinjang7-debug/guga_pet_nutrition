@@ -25,6 +25,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/", label: t("nav_home", lang), match: (l) => l === "/" },
     { href: "/wizard/new", label: t("workflow_wizard", lang), match: (l) => l.startsWith("/wizard") },
     { href: "/recipe/new", label: t("workflow_simple", lang), match: (l) => l.startsWith("/recipe") },
+    { href: "/premix/new", label: t("premix_composer", lang), match: (l) => l.startsWith("/premix") },
   ];
 
   return (

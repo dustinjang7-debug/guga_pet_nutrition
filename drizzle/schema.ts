@@ -37,7 +37,7 @@ export const recipes = mysqlTable("recipes", {
   bodyWeightKg: decimal("bodyWeightKg", { precision: 6, scale: 2 }).notNull(),
   lifeStageFactor: decimal("lifeStageFactor", { precision: 4, scale: 2 }).notNull(),
   feedingMode: mysqlEnum("feedingMode", ["normal", "weight_loss"]).default("normal").notNull(),
-  workflow: mysqlEnum("workflow", ["wizard", "simple"]).default("simple").notNull(),
+  workflow: mysqlEnum("workflow", ["wizard", "simple", "premix"]).default("simple").notNull(),
   startingVolumeG: int("startingVolumeG").default(1000).notNull(),
   targetProteinPct: decimal("targetProteinPct", { precision: 5, scale: 2 }),
   targetCarbPct: decimal("targetCarbPct", { precision: 5, scale: 2 }),

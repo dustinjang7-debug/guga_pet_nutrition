@@ -44,11 +44,14 @@ export function IngredientPicker({
   onPick,
   lang,
   presetSort,
+  excludeIds,
 }: {
   onPick: (ingredient: Ingredient, defaultGrams: number) => void;
   lang: Lang;
   /** When the wizard wants to pre-sort by a specific nutrient. */
   presetSort?: keyof Ingredient;
+  /** Hide these ingredient ids from the list (e.g. premix SKUs in PremixComposer). */
+  excludeIds?: number[];
 }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("all");
@@ -57,13 +60,18 @@ export function IngredientPicker({
 
   const categories = useMemo(() => {
     const set = new Set<string>();
-    INGREDIENTS.forEach((i) => set.add(i.category));
+    const exclude = new Set(excludeIds ?? []);
+    INGREDIENTS.forEach((i) => {
+      if (!exclude.has(i.id)) set.add(i.category);
+    });
     return Array.from(set).sort();
-  }, []);
+  }, [excludeIds]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const exclude = new Set(excludeIds ?? []);
     let arr = INGREDIENTS.filter((i) => {
+      if (exclude.has(i.id)) return false;
       if (category !== "all" && i.category !== category) return false;
       if (!q) return true;
       return (
@@ -85,7 +93,7 @@ export function IngredientPicker({
       });
     }
     return arr;
-  }, [search, category, sortKey, sortDesc, lang]);
+  }, [search, category, sortKey, sortDesc, lang, excludeIds]);
 
   const sortDef = SORTABLE_NUTRIENTS.find((s) => s.key === sortKey);
   const sortLabel = (s: typeof SORTABLE_NUTRIENTS[number]) =>

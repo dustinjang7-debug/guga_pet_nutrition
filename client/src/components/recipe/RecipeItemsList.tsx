@@ -30,6 +30,7 @@ export function RecipeItemsList({
   onClearLocks,
   onRemove,
   lang,
+  fixedIds,
 }: {
   items: RecipeItem[];
   /** Set of ingredientIds that are locked. */
@@ -42,6 +43,10 @@ export function RecipeItemsList({
   onClearLocks: () => void;
   onRemove: (ingredientId: number) => void;
   lang: Lang;
+  /** Ingredient ids that are fixed (cannot be removed, % cannot be edited, no lock toggle).
+   *  Used by Premix Composer to pin the GUGA premix row. The premix grams update is
+   *  handled outside this component (e.g. when SKU or pet weight changes). */
+  fixedIds?: number[];
 }) {
   if (items.length === 0) {
     return (
@@ -67,13 +72,16 @@ export function RecipeItemsList({
     onClearLocks();
   }
 
+  const fixedSet = useMemo(() => new Set(fixedIds ?? []), [fixedIds]);
+
   function handlePctChange(ingredientId: number, raw: string) {
     const pct = parseFloat(raw);
     if (Number.isNaN(pct)) return;
+    // Fixed rows act as locked rows during rebalance so their grams stay constant.
     const annotated = items.map(i => ({
       ingredientId: i.ingredientId,
       grams: i.grams,
-      locked: locks.has(i.ingredientId),
+      locked: locks.has(i.ingredientId) || fixedSet.has(i.ingredientId),
     }));
     const next = rebalanceByPct(annotated, ingredientId, pct);
     onItemsChange(next.map(({ ingredientId, grams }) => ({ ingredientId, grams })));
@@ -108,25 +116,39 @@ export function RecipeItemsList({
           const ing = INGREDIENT_BY_ID[item.ingredientId];
           if (!ing) return null;
           const pct = gramsToPct(item.grams, total);
-          const isLocked = locks.has(item.ingredientId);
+          const isFixed = fixedSet.has(item.ingredientId);
+          const isLocked = locks.has(item.ingredientId) || isFixed;
           return (
             <div
               key={item.ingredientId}
               className={`flex items-center gap-3 px-5 py-3 transition-colors ${
-                isLocked ? "bg-amber-50/40" : "hover:bg-secondary/30"
+                isFixed
+                  ? "bg-primary/5 border-l-2 border-primary"
+                  : isLocked
+                    ? "bg-amber-50/40"
+                    : "hover:bg-secondary/30"
               }`}
             >
-              <button
-                onClick={() => onToggleLock(item.ingredientId)}
-                title={isLocked ? t("unlock_row", lang) : t("lock_row", lang)}
-                className={`size-7 flex items-center justify-center rounded-md transition-colors shrink-0 ${
-                  isLocked
-                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                    : "text-muted-foreground hover:bg-secondary"
-                }`}
-              >
-                {isLocked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5" />}
-              </button>
+              {isFixed ? (
+                <span
+                  className="size-7 flex items-center justify-center rounded-md bg-primary/15 text-primary shrink-0"
+                  title={t("premix_locked_hint", lang)}
+                >
+                  <Lock className="size-3.5" />
+                </span>
+              ) : (
+                <button
+                  onClick={() => onToggleLock(item.ingredientId)}
+                  title={isLocked ? t("unlock_row", lang) : t("lock_row", lang)}
+                  className={`size-7 flex items-center justify-center rounded-md transition-colors shrink-0 ${
+                    isLocked
+                      ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                      : "text-muted-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {isLocked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5" />}
+                </button>
+              )}
 
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{ingredientName(ing, lang)}</div>
@@ -146,15 +168,17 @@ export function RecipeItemsList({
                   onChange={e => handlePctChange(item.ingredientId, e.target.value)}
                   className="w-20 h-8 text-right"
                   disabled={isLocked}
-                  title={isLocked ? t("unlock_row", lang) : t("pct_of_recipe", lang)}
+                  title={isFixed ? t("premix_locked_hint", lang) : isLocked ? t("unlock_row", lang) : t("pct_of_recipe", lang)}
                 />
                 <span className="text-xs text-muted-foreground w-4">%</span>
-                <button
-                  onClick={() => onRemove(item.ingredientId)}
-                  className="ml-1 size-8 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors rounded-md hover:bg-destructive/10"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
+                {!isFixed && (
+                  <button
+                    onClick={() => onRemove(item.ingredientId)}
+                    className="ml-1 size-8 flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors rounded-md hover:bg-destructive/10"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           );

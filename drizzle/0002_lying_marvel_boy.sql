@@ -1,0 +1,1 @@
+ALTER TABLE `recipes` MODIFY COLUMN `workflow` enum('wizard','simple','premix') NOT NULL DEFAULT 'simple';

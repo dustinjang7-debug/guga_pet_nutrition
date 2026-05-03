@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import RecipeBuilder from "./pages/RecipeBuilder";
 import WizardPage from "./pages/WizardPage";
+import PremixComposer from "./pages/PremixComposer";
 
 function Router() {
   return (
@@ -16,6 +17,8 @@ function Router() {
       <Route path={"/recipe/:id"} component={RecipeBuilder} />
       <Route path={"/wizard/new"} component={WizardPage} />
       <Route path={"/wizard/:id"} component={WizardPage} />
+      <Route path={"/premix/new"} component={PremixComposer} />
+      <Route path={"/premix/:id"} component={PremixComposer} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>
