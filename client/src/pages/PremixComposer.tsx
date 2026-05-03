@@ -29,7 +29,7 @@ import {
   SACHET_GRAMS,
   type PremixBatchWarning,
 } from "@shared/premixBatchDose";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { Save, Loader2, AlertTriangle, Package } from "lucide-react";
@@ -78,6 +78,32 @@ export default function PremixComposer() {
   // Premix-specific
   const [premixSku, setPremixSku] = useState<PremixSku>(PREMIX_BASIC_ID);
   const [daysToShow, setDaysToShow] = useState<number>(1);
+  // Gates the multi-day chips: user must press "Normalize to 1 day" first.
+  // Reset whenever pet profile, premix SKU, or fresh-ingredient composition
+  // changes (the 1-day baseline is stale and scaling would compound errors).
+  const [hasNormalized, setHasNormalized] = useState<boolean>(false);
+  useEffect(() => {
+    setHasNormalized(false);
+    setDaysToShow(1);
+  }, [pet.species, pet.bodyWeightKg, pet.lifeStageKey, pet.factor, pet.feedingMode, premixSku]);
+  // Track the fresh-ingredient signature (which items + their grams) so we
+  // reset normalize gate on add/remove/% edits but NOT on the premix-row
+  // sync effect (which only touches the premix row).
+  const freshSignature = useMemo(
+    () =>
+      items
+        .filter(i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]))
+        .map(i => `${i.ingredientId}:${i.grams}`)
+        .sort()
+        .join("|"),
+    [items],
+  );
+  const lastNormalizedSignature = useRef<string>("");
+  useEffect(() => {
+    if (freshSignature !== lastNormalizedSignature.current) {
+      setHasNormalized(false);
+    }
+  }, [freshSignature]);
 
   // Step 1 — sachets/day from body weight (whole-sachet snap, customer-facing dose).
   const dose = useMemo(() => computeSachetDose(pet.bodyWeightKg), [pet.bodyWeightKg]);
@@ -219,13 +245,16 @@ export default function PremixComposer() {
   }, [premixSku, premixGrams]);
 
   /**
-   * Normalize the recipe so the *fresh* portion equals one day of feed.
-   * Premix is recalculated by the existing useMemo. Resets daysToShow to 1
-   * so the user can immediately preview multi-day batches.
+   * Scale the *fresh* portion so the batch covers exactly `targetDays` days
+   * of feed. Premix is recalculated by the existing useMemo. Day=1 is what
+   * the original "Normalize to 1 day" button does; the 1/3/7 chips reuse
+   * the same scaling math with a different multiplier so the user can
+   * actually batch-prep 3 or 7 days of food.
    */
-  function normalizeToOneDay() {
-    if (!dose.ok || daily.feedingGrams <= 0 || freshGrams <= 0) return;
-    const scale = daily.feedingGrams / freshGrams;
+  function scaleToDays(targetDays: number) {
+    if (!dose.ok || daily.feedingGrams <= 0 || freshGrams <= 0 || targetDays <= 0) return;
+    const targetFreshG = daily.feedingGrams * targetDays;
+    const scale = targetFreshG / freshGrams;
     setItems(prev =>
       prev.map(it =>
         PREMIX_IDS.includes(it.ingredientId as typeof PREMIX_IDS[number])
@@ -233,8 +262,22 @@ export default function PremixComposer() {
           : { ...it, grams: Math.round(it.grams * scale * 10) / 10 },
       ),
     );
-    setDaysToShow(1);
-    toast.success(t("normalize_done", lang));
+    setDaysToShow(targetDays);
+    setHasNormalized(true);
+    // Record the post-scale signature so the freshSignature watcher above
+    // doesn't immediately flip hasNormalized back to false.
+    const newSig = items
+      .filter(i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]))
+      .map(i => `${i.ingredientId}:${Math.round(i.grams * scale * 10) / 10}`)
+      .sort()
+      .join("|");
+    lastNormalizedSignature.current = newSig;
+    if (targetDays === 1) toast.success(t("normalize_done", lang));
+    else toast.success(`${targetDays} × ${daily.feedingGrams.toFixed(0)} g`);
+  }
+
+  function normalizeToOneDay() {
+    scaleToDays(1);
   }
 
   const [fixForKey, setFixForKey] = useState<string | null>(null);
@@ -405,7 +448,9 @@ export default function PremixComposer() {
               daysToShow={daysToShow}
               setDaysToShow={setDaysToShow}
               onNormalize={normalizeToOneDay}
+              onScaleDays={scaleToDays}
               canNormalize={dose.ok && daily.feedingGrams > 0 && freshGrams > 0}
+              hasNormalized={hasNormalized}
               lang={lang}
             />
 
@@ -516,7 +561,9 @@ function PremixCard({
   daysToShow,
   setDaysToShow,
   onNormalize,
+  onScaleDays,
   canNormalize,
+  hasNormalized,
   lang,
 }: {
   sku: PremixSku;
@@ -533,7 +580,9 @@ function PremixCard({
   daysToShow: number;
   setDaysToShow: (n: number) => void;
   onNormalize: () => void;
+  onScaleDays: (n: number) => void;
   canNormalize: boolean;
+  hasNormalized: boolean;
   lang: ReturnType<typeof useLang>[0];
 }) {
   return (
@@ -656,7 +705,9 @@ function PremixCard({
                       size="sm"
                       variant={daysToShow === d ? "default" : "outline"}
                       className="h-6 px-2 text-[11px] flex-1"
-                      onClick={() => setDaysToShow(d)}
+                      onClick={() => onScaleDays(d)}
+                      disabled={!hasNormalized}
+                      title={hasNormalized ? undefined : t("must_normalize_first", lang)}
                     >
                       {d}
                     </Button>
@@ -666,9 +717,11 @@ function PremixCard({
                     min={1}
                     max={30}
                     value={daysToShow}
+                    disabled={!hasNormalized}
+                    title={hasNormalized ? undefined : t("must_normalize_first", lang)}
                     onChange={e => {
                       const n = parseInt(e.target.value, 10);
-                      if (!isNaN(n) && n >= 1 && n <= 30) setDaysToShow(n);
+                      if (!isNaN(n) && n >= 1 && n <= 30) onScaleDays(n);
                     }}
                     className="h-6 w-12 text-[11px] tabular-nums"
                   />

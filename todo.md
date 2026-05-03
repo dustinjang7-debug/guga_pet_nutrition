@@ -302,3 +302,21 @@
 - [x] Default collapsed; expand restores full chip grid
 - [x] Selecting a chip auto-collapses; clicking header re-expands
 - [x] EN/ZH/TH labels for "Categories" + active chip name
+
+## v0.6.9 — Fix "Scale to 3/7 days" buttons in Premix Composer
+
+- [x] Reproduce: chips only updated `daysToShow` state, never used in calc
+- [x] Trace daysToShow → fresh ingredient scaling
+- [x] Fix: chips now call scaleToDays(N) which multiplies fresh items by N × daily/freshGrams
+- [x] Tests pass (124/124)
+
+## v0.6.10 — Gate scale-to-N-days behind Normalize first
+
+- [x] hasNormalized flag set true on Normalize/scale click, reset on species/weight/lifeStage/factor/feedingMode/SKU change
+- [x] Disable 1/3/7 chips + number input until normalized; tooltip shows "Normalize to 1 day first"
+- [x] EN/ZH/TH labels added
+
+## v0.6.11 — Hotfix React #185 on species swap
+
+- [x] Reproduced in dev: NO error — confirmed reported error is from stale prod bundle (index-CUxLTXqE.js = v0.6.7)
+- [x] User must Publish + hard refresh to pick up v0.6.8–v0.6.10 fixes
