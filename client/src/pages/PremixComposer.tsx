@@ -185,13 +185,34 @@ export default function PremixComposer() {
   // Keep premix row in sync with SKU + computed batch dose. The row is always the
   // first when weight is in range, even before any fresh ingredient is added
   // (in which case it falls back to 1-day worth so AAFCO can still be displayed).
+  //
+  // IMPORTANT: this effect MUST be a no-op when the desired state already matches
+  // the current `items`, otherwise we get an infinite loop:
+  //   bodyWeight → dose → premixBatch → setItems → daily.feedingGrams shifts →
+  //   premixBatch recomputes → setItems again → React #185.
+  // We compare against the existing premix row (id + rounded grams) and bail out
+  // when nothing meaningful changed.
   useEffect(() => {
     setItems(prev => {
+      const existingPremix = prev.find(
+        i => PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]),
+      );
       const cleaned = prev.filter(
         i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]),
       );
-      if (premixGrams <= 0) return cleaned;
+      if (premixGrams <= 0) {
+        // Nothing to add. Bail out if there's also nothing to remove.
+        return existingPremix ? cleaned : prev;
+      }
       const rounded = Math.round(premixGrams * 10) / 10;
+      if (
+        existingPremix
+        && existingPremix.ingredientId === premixSku
+        && Math.abs(existingPremix.grams - rounded) < 0.05
+      ) {
+        // Same SKU, same rounded grams → no state change.
+        return prev;
+      }
       return [{ ingredientId: premixSku, grams: rounded }, ...cleaned];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
