@@ -178,20 +178,25 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
-## v0.6.0 — Premix Composer (3rd menu)
+## v0.6.1 — Premix Composer DER display
 
-- [ ] Add `CatVita Mineral BASIC` (id 901) + `UPGRADE` (id 902) as ingredients, category=premix; nutrient values per 100g derived from xlsx (per 1 kg ÷ 10)
-- [ ] `shared/sachetDose.ts`: bodyWeightKg → sachets/day (1 sachet/5g; 2–7=1, 7.5–12.5=2, +1 per 5kg up to 40kg); reject <2 or >40
-- [ ] vitest 8 cases (boundaries 2, 7.4, 7.5, 12.5, 12.6, 40.0, 40.1, 1.9)
-- [ ] drizzle: add `recipeType` enum column to recipes (`composer|wizard|premix`), default `composer`; migration
-- [ ] Update tRPC `recipes.create/update/list` to accept + return `recipeType`
-- [ ] New page `client/src/pages/PremixComposer.tsx`: fixed Premix row at top (SKU toggle BASIC/UPGRADE + auto-suggested g/day from sachetDose, locked to whole-sachet multiples), then normal ingredient rows
-- [ ] Block out-of-range body weights with a friendly notice
-- [ ] Add `/premix/new` and `/premix/:id` routes in App.tsx
-- [ ] AppShell nav: third button "Premix Composer"
-- [ ] Home recipes list: filter tabs (All / Composer / Wizard / Premix)
-- [ ] i18n keys EN/ZH/TH (premix_composer, sachet, sachets_per_day, premix_sku, basic, upgrade, weight_out_of_range, premix_locked_hint)
-- [ ] PDF export already works (no change — premix is just an ingredient row)
+- [ ] Compare Simple Composer DER display block to Premix Composer
+- [ ] Apply same DER block to Premix Composer
+- [ ] Verify DER updates with weight / life-stage / mode
+
+## v0.6.0 — Premix Composer (3rd menu) — DONE
+
+- [x] Added BASIC (id 901) + UPGRADE (id 902) ingredients, category=premix
+- [x] `shared/sachetDose.ts` + 8 vitest cases
+- [x] drizzle: `workflow` enum extended with 'premix' (no separate column needed)
+- [x] `recipes.create/update/list` already accepts workflow; allowed premix
+- [x] PremixComposer page with locked premix row, SKU toggle, sachet-snapped dose
+- [x] Out-of-range body weight blocked with friendly notice
+- [x] /premix/new + /premix/:id routes
+- [x] AppShell nav: "Premix Composer"
+- [ ] Home recipes list filter tabs (defer)
+- [x] i18n keys EN/ZH/TH
+- [x] PDF export works as-is
 
 ## v0.5.1 — Scale to 1000g when all rows locked
 

@@ -31,13 +31,25 @@ import { Save, Loader2, AlertTriangle, Package } from "lucide-react";
 
 import { ExportPdfButton } from "@/components/ExportPdfButton";
 import { PetProfilePane, defaultPetProfile, type PetProfileState } from "@/components/recipe/PetProfile";
+import { VolumeAndTargets, type MacroTargets } from "@/components/recipe/VolumeAndTargets";
+import { StartingVolumeStrip } from "@/components/recipe/StartingVolumeStrip";
 import { IngredientPicker } from "@/components/recipe/IngredientPicker";
 import { RecipeItemsList } from "@/components/recipe/RecipeItemsList";
 import { AafcoPanel } from "@/components/recipe/AafcoPanel";
 import { SummaryCard } from "@/components/recipe/SummaryCard";
+import { AafcoFixSheet } from "@/components/recipe/AafcoFixSheet";
 
 type PremixSku = typeof PREMIX_BASIC_ID | typeof PREMIX_UPGRADE_ID;
 
+/**
+ * Premix Composer = Simple Composer (RecipeBuilder) with one extra block:
+ *
+ *   Pet Profile  →  Premix card (BASIC/UPGRADE + auto sachet dose)  →  rest is identical.
+ *
+ * The Premix row is locked at the top of Current Recipe, dose snaps to whole sachets
+ * derived from pet body weight via shared/sachetDose. Everything else (DER, AAFCO,
+ * autofix, picker, save, PDF) is the same as Simple Composer.
+ */
 export default function PremixComposer() {
   const [lang] = useLang();
   const params = useParams<{ id?: string }>();
@@ -45,8 +57,12 @@ export default function PremixComposer() {
   const recipeId = params.id ? parseInt(params.id, 10) : undefined;
   const isEditing = recipeId !== undefined && !isNaN(recipeId);
 
+  // Pet + targets
   const [pet, setPet] = useState<PetProfileState>(defaultPetProfile());
-  const [premixSku, setPremixSku] = useState<PremixSku>(PREMIX_BASIC_ID);
+  const [startingVolume, setStartingVolume] = useState(1000);
+  const [targets, setTargets] = useState<MacroTargets>({ proteinPct: 45, carbPct: 25 });
+
+  // Recipe
   const [items, setItems] = useState<RecipeItem[]>([]);
   const [locks, setLocks] = useState<Set<number>>(new Set());
   const [recipeName, setRecipeName] = useState("");
@@ -54,22 +70,26 @@ export default function PremixComposer() {
   const [recipeStatus, setRecipeStatus] = useState<"draft" | "approved">("draft");
   const [basis, setBasis] = useState<"dm" | "me">("dm");
 
-  // Sachet dose for current pet weight (1 sachet = 5 g; rule in shared/sachetDose.ts)
+  // Premix-specific
+  const [premixSku, setPremixSku] = useState<PremixSku>(PREMIX_BASIC_ID);
+
+  // Sachet dose for current pet weight (rule in shared/sachetDose.ts)
   const dose = useMemo(() => computeSachetDose(pet.bodyWeightKg), [pet.bodyWeightKg]);
   const premixGrams = dose.ok ? dose.gramsPerDay : 0;
 
-  // Keep the premix row in sync with the SKU + sachet dose.
-  // Premix is always present (even when items is empty for a new recipe).
+  // Keep premix row in sync with SKU + dose. Premix is always the first row when
+  // the weight is in range, even before the user picks any fresh ingredient.
   useEffect(() => {
     setItems(prev => {
-      // Remove any old premix rows, drop the wrong SKU, then re-add the current SKU at top.
-      const cleaned = prev.filter(i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]));
+      const cleaned = prev.filter(
+        i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]),
+      );
       if (premixGrams <= 0) return cleaned;
       return [{ ingredientId: premixSku, grams: premixGrams }, ...cleaned];
     });
   }, [premixSku, premixGrams]);
 
-  // Load existing recipe (if editing)
+  // Load recipe (edit mode)
   const recipeQuery = trpc.recipes.get.useQuery({ id: recipeId! }, { enabled: isEditing });
   useEffect(() => {
     const r = recipeQuery.data;
@@ -77,6 +97,11 @@ export default function PremixComposer() {
     setRecipeName(r.name);
     setNotes(r.notes ?? "");
     setRecipeStatus(r.status as "draft" | "approved");
+    setStartingVolume(r.startingVolumeG);
+    setTargets({
+      proteinPct: r.targetProteinPct ? parseFloat(String(r.targetProteinPct)) : 45,
+      carbPct: r.targetCarbPct ? parseFloat(String(r.targetCarbPct)) : 25,
+    });
     setPet({
       species: r.species as "dog" | "cat",
       bodyWeightKg: parseFloat(String(r.bodyWeightKg)),
@@ -91,7 +116,6 @@ export default function PremixComposer() {
       ingredientId: it.ingredientId,
       grams: typeof it.grams === "string" ? parseFloat(it.grams) : it.grams,
     }));
-    // Detect SKU from saved items if present, else default to BASIC.
     const sku = loaded.find(i => i.ingredientId === PREMIX_UPGRADE_ID)
       ? PREMIX_UPGRADE_ID
       : PREMIX_BASIC_ID;
@@ -99,6 +123,7 @@ export default function PremixComposer() {
     setItems(loaded);
   }, [recipeQuery.data]);
 
+  // Live calcs (identical to Simple Composer)
   const totals = useMemo(() => recipeTotals(items), [items]);
   const macros = useMemo(() => recipeMacros(items, totals), [items, totals]);
   const stage =
@@ -115,6 +140,8 @@ export default function PremixComposer() {
     [pet.bodyWeightKg, pet.factor, macros],
   );
 
+  const [fixForKey, setFixForKey] = useState<string | null>(null);
+
   function addIngredient(ing: Ingredient, defaultGrams: number) {
     setItems(prev => {
       if (prev.find(p => p.ingredientId === ing.id)) return prev;
@@ -122,7 +149,7 @@ export default function PremixComposer() {
     });
   }
   function removeItem(ingredientId: number) {
-    if (PREMIX_IDS.includes(ingredientId as typeof PREMIX_IDS[number])) return; // protected
+    if (PREMIX_IDS.includes(ingredientId as typeof PREMIX_IDS[number])) return;
     setItems(prev => prev.filter(p => p.ingredientId !== ingredientId));
     setLocks(prev => {
       if (!prev.has(ingredientId)) return prev;
@@ -140,7 +167,6 @@ export default function PremixComposer() {
     });
   }
 
-  // Save / update
   const utils = trpc.useUtils();
   const createMut = trpc.recipes.create.useMutation({
     onSuccess: data => {
@@ -169,9 +195,9 @@ export default function PremixComposer() {
       name: recipeName.trim(),
       notes: notes.trim(),
       status: recipeStatus,
-      startingVolumeG: 1000,
-      targetProteinPct: 45,
-      targetCarbPct: 25,
+      startingVolumeG: startingVolume,
+      targetProteinPct: targets.proteinPct,
+      targetCarbPct: targets.carbPct,
       species: pet.species,
       bodyWeightKg: pet.bodyWeightKg,
       lifeStage: pet.lifeStageKey,
@@ -188,6 +214,7 @@ export default function PremixComposer() {
   }
 
   const isSaving = createMut.isPending || updateMut.isPending;
+  const used = items.reduce((s, i) => s + i.grams, 0);
   const premixIngredient = INGREDIENT_BY_ID[premixSku];
 
   return (
@@ -202,9 +229,6 @@ export default function PremixComposer() {
             <h1 className="font-display text-3xl font-bold mt-1">
               {recipeName || t("premix_composer", lang)}
             </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {t("premix_composer_desc", lang)}
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <ExportPdfButton recipeId={isEditing ? recipeId : undefined} />
@@ -261,52 +285,24 @@ export default function PremixComposer() {
           </div>
         </div>
 
-        {/* Premix dose card */}
-        <Card className="p-4 mb-5 border-primary/30 bg-primary/5">
-          <div className="flex items-start gap-3">
-            <div className="size-9 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
-              <Package className="size-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="font-display font-semibold text-sm uppercase tracking-wider">
-                  {t("premix_sku", lang)}
-                </div>
-                <Select value={String(premixSku)} onValueChange={v => setPremixSku(parseInt(v, 10) as PremixSku)}>
-                  <SelectTrigger className="h-8 w-44 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={String(PREMIX_BASIC_ID)}>{t("basic", lang)}</SelectItem>
-                    <SelectItem value={String(PREMIX_UPGRADE_ID)}>{t("upgrade", lang)}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="text-xs text-muted-foreground mt-1 truncate">
-                {premixIngredient ? ingredientName(premixIngredient, lang) : ""}
-              </div>
-              <div className="mt-3">
-                {dose.ok ? (
-                  <div data-numeric="true" className="text-sm">
-                    <span className="font-medium text-foreground">{dose.sachets}</span>
-                    <span className="text-muted-foreground"> {t("sachets_per_day", lang)} · {dose.gramsPerDay} g/day · {GRAMS_PER_SACHET} g / {t("sachet", lang)}</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-sm text-amber-700">
-                    <AlertTriangle className="size-4" />
-                    <span>{t("weight_out_of_range", lang)}</span>
-                  </div>
-                )}
-                <div className="text-[11px] text-muted-foreground mt-1">{t("premix_locked_hint", lang)}</div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        {/* Three-column layout */}
+        {/* Same column structure as Simple Composer; Premix card is inserted
+            right after PetProfile so it fits the natural top-down flow:
+            pet → premix dose → DER summary → recipe rows. */}
         <div className="grid grid-cols-12 gap-5">
+          {/* Left rail */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
             <PetProfilePane value={pet} onChange={setPet} lang={lang} />
+
+            <PremixCard
+              sku={premixSku}
+              setSku={setPremixSku}
+              dose={dose}
+              ingredient={premixIngredient}
+              derKcal={daily.derKcal}
+              feedingGrams={daily.feedingGrams}
+              lang={lang}
+            />
+
             <SummaryCard
               macros={macros}
               daily={daily}
@@ -327,6 +323,7 @@ export default function PremixComposer() {
             />
           </div>
 
+          {/* Center: picker (sticky) */}
           <div className="col-span-12 lg:col-span-4">
             <div className="lg:sticky lg:top-20">
               <div className="h-[calc(100vh-6rem)]">
@@ -339,19 +336,151 @@ export default function PremixComposer() {
             </div>
           </div>
 
+          {/* Right: AAFCO + StartingVolume + Targets (same as Simple Composer) */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
             <AafcoPanel
               rows={aafco}
               lang={lang}
               basis={basis}
               setBasis={setBasis}
-              onAutoFix={() => {
-                toast.info("Auto-fix is disabled in Premix mode — adjust fresh ingredients manually.");
-              }}
+              onAutoFix={k => setFixForKey(k)}
+            />
+            <StartingVolumeStrip
+              startingVolume={startingVolume}
+              setStartingVolume={setStartingVolume}
+              used={used}
+              lang={lang}
+            />
+            <VolumeAndTargets
+              startingVolume={startingVolume}
+              setStartingVolume={setStartingVolume}
+              used={used}
+              targets={targets}
+              setTargets={setTargets}
+              species={pet.species}
+              feedingMode={pet.feedingMode}
+              lang={lang}
+              currentMacros={macros}
+              showStartingVolume={false}
+              collapsibleTargets
+              defaultCollapsed
             />
           </div>
+
+          <AafcoFixSheet
+            open={fixForKey !== null}
+            onOpenChange={o => !o && setFixForKey(null)}
+            nutrientKey={fixForKey}
+            aafco={aafco}
+            items={items}
+            totalDM_g={macros.totalDryMatter_g}
+            onAdd={(ingredientId, grams) => {
+              setItems(prev => {
+                const idx = prev.findIndex(p => p.ingredientId === ingredientId);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = { ingredientId, grams: prev[idx].grams + grams };
+                  return next;
+                }
+                return [...prev, { ingredientId, grams }];
+              });
+              setFixForKey(null);
+            }}
+          />
         </div>
       </div>
     </AppShell>
+  );
+}
+
+/* ------------------------------- Premix card ------------------------------ */
+
+function PremixCard({
+  sku,
+  setSku,
+  dose,
+  ingredient,
+  derKcal,
+  feedingGrams,
+  lang,
+}: {
+  sku: PremixSku;
+  setSku: (s: PremixSku) => void;
+  dose: ReturnType<typeof computeSachetDose>;
+  ingredient: Ingredient | undefined;
+  derKcal: number;
+  feedingGrams: number;
+  lang: ReturnType<typeof useLang>[0];
+}) {
+  return (
+    <Card className="p-4 border-primary/30 bg-primary/5">
+      <div className="flex items-start gap-3">
+        <div className="size-9 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
+          <Package className="size-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="font-display font-semibold text-sm uppercase tracking-wider">
+              {t("premix_sku", lang)}
+            </div>
+            <Select
+              value={String(sku)}
+              onValueChange={v => setSku(parseInt(v, 10) as PremixSku)}
+            >
+              <SelectTrigger className="h-8 w-44 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={String(PREMIX_BASIC_ID)}>{t("basic", lang)}</SelectItem>
+                <SelectItem value={String(PREMIX_UPGRADE_ID)}>{t("upgrade", lang)}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1 truncate">
+            {ingredient ? ingredientName(ingredient, lang) : ""}
+          </div>
+
+          {dose.ok ? (
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-md bg-background/60 px-2 py-2">
+                <div data-numeric="true" className="text-lg font-semibold tabular-nums">
+                  {dose.sachets}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                  {t("sachets_per_day", lang)}
+                </div>
+              </div>
+              <div className="rounded-md bg-background/60 px-2 py-2">
+                <div data-numeric="true" className="text-lg font-semibold tabular-nums">
+                  {derKcal.toFixed(0)}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                  {t("daily_kcal_target", lang)}
+                </div>
+              </div>
+              <div className="rounded-md bg-background/60 px-2 py-2">
+                <div data-numeric="true" className="text-lg font-semibold tabular-nums">
+                  {feedingGrams > 0 ? feedingGrams.toFixed(0) : "—"}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                  {t("daily_feeding", lang)}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center gap-2 text-sm text-amber-700">
+              <AlertTriangle className="size-4" />
+              <span>{t("weight_out_of_range", lang)}</span>
+            </div>
+          )}
+
+          <div className="text-[11px] text-muted-foreground mt-2">
+            {dose.ok
+              ? `${dose.gramsPerDay} g/day · ${GRAMS_PER_SACHET} g / ${t("sachet", lang)} · ${t("premix_locked_hint", lang)}`
+              : t("premix_locked_hint", lang)}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
