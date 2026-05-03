@@ -24,6 +24,11 @@ import {
   PREMIX_IDS,
 } from "@shared/ingredients";
 import { computeSachetDose, GRAMS_PER_SACHET } from "@shared/sachetDose";
+import {
+  computePremixBatch,
+  SACHET_GRAMS,
+  type PremixBatchWarning,
+} from "@shared/premixBatchDose";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -72,22 +77,20 @@ export default function PremixComposer() {
 
   // Premix-specific
   const [premixSku, setPremixSku] = useState<PremixSku>(PREMIX_BASIC_ID);
+  const [daysToShow, setDaysToShow] = useState<number>(1);
 
-  // Sachet dose for current pet weight (rule in shared/sachetDose.ts)
+  // Step 1 — sachets/day from body weight (whole-sachet snap, customer-facing dose).
   const dose = useMemo(() => computeSachetDose(pet.bodyWeightKg), [pet.bodyWeightKg]);
-  const premixGrams = dose.ok ? dose.gramsPerDay : 0;
 
-  // Keep premix row in sync with SKU + dose. Premix is always the first row when
-  // the weight is in range, even before the user picks any fresh ingredient.
-  useEffect(() => {
-    setItems(prev => {
-      const cleaned = prev.filter(
-        i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]),
-      );
-      if (premixGrams <= 0) return cleaned;
-      return [{ ingredientId: premixSku, grams: premixGrams }, ...cleaned];
-    });
-  }, [premixSku, premixGrams]);
+  // Daily feeding amount comes from current macro density × DER (live recompute below).
+  // We compute it here on a stable derived value so the premix-in-batch loop has a
+  // single source of truth.
+  const freshGrams = useMemo(
+    () => items
+      .filter(i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]))
+      .reduce((s, i) => s + i.grams, 0),
+    [items],
+  );
 
   // Load recipe (edit mode)
   const recipeQuery = trpc.recipes.get.useQuery({ id: recipeId! }, { enabled: isEditing });
@@ -139,6 +142,79 @@ export default function PremixComposer() {
     () => dailyFeed(pet.bodyWeightKg, pet.factor, macros),
     [pet.bodyWeightKg, pet.factor, macros],
   );
+
+  // Step 2 + 3 — days covered and dynamic premix grams in this batch.
+  // Use the *current* batch total (fresh + previous premix grams) and the *daily*
+  // feeding estimate from DER+macros. We solve the fixed-point algebraically:
+  //
+  //   premixG = sachets * 5g * (freshG + premixG) / dailyG
+  //   premixG * (1 - sachets*5/dailyG) = sachets*5*freshG/dailyG
+  //
+  // so the next premix grams depend only on freshGrams + dailyG + sachets, no loop
+  // is required. This avoids the chicken-and-egg of premix-affecting-its-own-batch.
+  const premixBatch = useMemo(() => {
+    if (!dose.ok || daily.feedingGrams <= 0 || freshGrams <= 0) {
+      // Fall back to a 1-day batch dose so the recipe is meaningful even before
+      // any fresh ingredient is added.
+      return computePremixBatch({
+        sachetsPerDay: dose.ok ? dose.sachets : 0,
+        batchGrams: dose.ok ? dose.gramsPerDay : 0,
+        dailyFeedGrams: dose.ok ? dose.gramsPerDay : 1,
+      });
+    }
+    const sachetFracPerGram = (dose.sachets * SACHET_GRAMS) / daily.feedingGrams;
+    const denom = 1 - sachetFracPerGram;
+    if (denom <= 0) {
+      // Pet eats less than the prescribed premix mass per day → degenerate.
+      return computePremixBatch({
+        sachetsPerDay: dose.sachets,
+        batchGrams: freshGrams,
+        dailyFeedGrams: daily.feedingGrams,
+      });
+    }
+    const premixG = (sachetFracPerGram * freshGrams) / denom;
+    return computePremixBatch({
+      sachetsPerDay: dose.sachets,
+      batchGrams: freshGrams + premixG,
+      dailyFeedGrams: daily.feedingGrams,
+    });
+  }, [dose, freshGrams, daily.feedingGrams]);
+
+  const premixGrams = premixBatch.premixGrams;
+
+  // Keep premix row in sync with SKU + computed batch dose. The row is always the
+  // first when weight is in range, even before any fresh ingredient is added
+  // (in which case it falls back to 1-day worth so AAFCO can still be displayed).
+  useEffect(() => {
+    setItems(prev => {
+      const cleaned = prev.filter(
+        i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]),
+      );
+      if (premixGrams <= 0) return cleaned;
+      const rounded = Math.round(premixGrams * 10) / 10;
+      return [{ ingredientId: premixSku, grams: rounded }, ...cleaned];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [premixSku, premixGrams]);
+
+  /**
+   * Normalize the recipe so the *fresh* portion equals one day of feed.
+   * Premix is recalculated by the existing useMemo. Resets daysToShow to 1
+   * so the user can immediately preview multi-day batches.
+   */
+  function normalizeToOneDay() {
+    if (!dose.ok || daily.feedingGrams <= 0 || freshGrams <= 0) return;
+    const scale = daily.feedingGrams / freshGrams;
+    setItems(prev =>
+      prev.map(it =>
+        PREMIX_IDS.includes(it.ingredientId as typeof PREMIX_IDS[number])
+          ? it
+          : { ...it, grams: Math.round(it.grams * scale * 10) / 10 },
+      ),
+    );
+    setDaysToShow(1);
+    toast.success(t("normalize_done", lang));
+  }
 
   const [fixForKey, setFixForKey] = useState<string | null>(null);
 
@@ -300,6 +376,15 @@ export default function PremixComposer() {
               ingredient={premixIngredient}
               derKcal={daily.derKcal}
               feedingGrams={daily.feedingGrams}
+              days={premixBatch.days}
+              sachetsInBatch={premixBatch.sachetsInBatch}
+              premixGrams={premixGrams}
+              warnings={premixBatch.warnings}
+              freshGrams={freshGrams}
+              daysToShow={daysToShow}
+              setDaysToShow={setDaysToShow}
+              onNormalize={normalizeToOneDay}
+              canNormalize={dose.ok && daily.feedingGrams > 0 && freshGrams > 0}
               lang={lang}
             />
 
@@ -402,6 +487,15 @@ function PremixCard({
   ingredient,
   derKcal,
   feedingGrams,
+  days,
+  sachetsInBatch,
+  premixGrams,
+  warnings,
+  freshGrams,
+  daysToShow,
+  setDaysToShow,
+  onNormalize,
+  canNormalize,
   lang,
 }: {
   sku: PremixSku;
@@ -410,6 +504,15 @@ function PremixCard({
   ingredient: Ingredient | undefined;
   derKcal: number;
   feedingGrams: number;
+  days: number;
+  sachetsInBatch: number;
+  premixGrams: number;
+  warnings: PremixBatchWarning[];
+  freshGrams: number;
+  daysToShow: number;
+  setDaysToShow: (n: number) => void;
+  onNormalize: () => void;
+  canNormalize: boolean;
   lang: ReturnType<typeof useLang>[0];
 }) {
   return (
@@ -473,6 +576,85 @@ function PremixCard({
               <span>{t("weight_out_of_range", lang)}</span>
             </div>
           )}
+
+          {dose.ok && days > 0 ? (
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-md bg-background/60 px-2 py-2">
+                <div data-numeric="true" className="text-base font-semibold tabular-nums">
+                  {days.toFixed(2)}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                  {t("days_of_food", lang)}
+                </div>
+              </div>
+              <div className="rounded-md bg-background/60 px-2 py-2">
+                <div data-numeric="true" className="text-base font-semibold tabular-nums">
+                  {sachetsInBatch.toFixed(2)} ({premixGrams.toFixed(1)}g)
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                  {t("sachets_in_batch", lang)}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {warnings.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              {warnings.map(w => (
+                <div key={w} className="flex items-start gap-1.5 text-[11px] text-amber-700">
+                  <AlertTriangle className="size-3 mt-0.5 shrink-0" />
+                  <span>{t(`premix_warn_${w}` as const, lang)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {/* Stage 2 controls — only show once user has fresh ingredients */}
+          {canNormalize ? (
+            <div className="mt-3 pt-3 border-t border-primary/20 space-y-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px] flex-1"
+                  onClick={onNormalize}
+                  disabled={freshGrams <= 0}
+                  title={t("normalize_hint", lang)}
+                >
+                  {t("normalize_to_1_day", lang)}
+                </Button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
+                  {t("days_to_show", lang)}
+                </span>
+                <div className="flex gap-1 flex-1">
+                  {[1, 3, 7].map(d => (
+                    <Button
+                      key={d}
+                      size="sm"
+                      variant={daysToShow === d ? "default" : "outline"}
+                      className="h-6 px-2 text-[11px] flex-1"
+                      onClick={() => setDaysToShow(d)}
+                    >
+                      {d}
+                    </Button>
+                  ))}
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={daysToShow}
+                    onChange={e => {
+                      const n = parseInt(e.target.value, 10);
+                      if (!isNaN(n) && n >= 1 && n <= 30) setDaysToShow(n);
+                    }}
+                    className="h-6 w-12 text-[11px] tabular-nums"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="text-[11px] text-muted-foreground mt-2">
             {dose.ok

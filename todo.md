@@ -178,6 +178,27 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
+## v0.6.4 — Premix two-stage compose → normalize → batch display
+
+- [ ] PremixCard: add "Normalize to 1 day" button (visible when fresh items exist)
+- [ ] Normalize: scale all fresh items by `dailyFeedGrams / freshGrams`, premix → sachets×5g
+- [ ] Add Days-to-Show selector (1, 3, 7, custom) below Normalize button
+- [ ] Recipe rows display `perDay×daysToShow`; underlying state stays per-day
+- [ ] Premix grams derived live from `sachets×5×daysToShow`
+- [ ] i18n keys EN/ZH/TH (normalize_to_1_day, days_to_show, normalize_hint, normalized_badge)
+- [ ] vitest: normalize math, days display
+
+## v0.6.3 — Premix dynamic batch scaling + lock UX fixes
+
+- [ ] `shared/premixBatchDose.ts`: premixGrams = sachets/day × 5 × (batchG / dailyFeedG); + vitest
+- [ ] PremixComposer: wire dynamic premix grams into the locked premix row; auto-recompute on every fresh-ingredient change
+- [ ] Show "X days of food" + "Y sachets in this batch" in the Premix card
+- [ ] Soft-warn if days < 0.5 or > 10
+- [ ] Verify Scale-to-1000g button shows in all 3 menus when allLocked (Premix counts premix row as locked too)
+- [ ] Dialog: when adding a new ingredient while allLocked, ask user to pick a donor row to take % from (or unlock all)
+- [ ] vitest the new dialog logic + premixBatchDose math
+- [ ] i18n keys EN/ZH/TH (days_of_food, sachets_in_batch, all_locked_pick_donor, take_from)
+
 ## v0.6.2 — Typeable % input + manual sort
 
 - [ ] RecipeItemsList: replace stepper-only % with typeable input (commit on blur + Enter, 1-decimal max, clamp to slack)
