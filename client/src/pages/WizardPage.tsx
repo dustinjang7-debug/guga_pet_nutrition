@@ -42,7 +42,6 @@ import {
   Unlock, X,
 } from "lucide-react";
 import { rebalanceByPct } from "@shared/rebalance";
-import { dominantMacro, MACRO_COLORS } from "@shared/macroColor";
 
 import {
   PetProfilePane, defaultPetProfile, type PetProfileState,
@@ -1238,28 +1237,18 @@ function RecipeSoFar({
           {items.length} {t("ingredients_count", lang)} · {t("total_label", lang)} {total.toFixed(0)} g
         </span>
       </div>
-      <div className="flex items-center justify-between mb-2 gap-2">
-        <p className="text-[11px] text-muted-foreground">{t("rebalance_hint", lang)}</p>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
-          <span className="inline-flex items-center gap-1"><span className={`size-2 rounded-full ${MACRO_COLORS.protein.dot}`} />P</span>
-          <span className="inline-flex items-center gap-1"><span className={`size-2 rounded-full ${MACRO_COLORS.fat.dot}`} />F</span>
-          <span className="inline-flex items-center gap-1"><span className={`size-2 rounded-full ${MACRO_COLORS.carb.dot}`} />C</span>
-        </div>
-      </div>
+      <p className="text-[11px] text-muted-foreground mb-2">{t("rebalance_hint", lang)}</p>
       <div className="divide-y divide-border">
         {sorted.map((it) => {
           const ing = INGREDIENT_BY_ID[it.ingredientId];
           if (!ing) return null;
           const pct = total > 0 ? (it.grams / total) * 100 : 0;
           const isLocked = locks.has(it.ingredientId);
-          const macro = dominantMacro(ing);
-          const macroStripe = MACRO_COLORS[macro].stripe;
           return (
             <div
               key={it.ingredientId}
-              className={`relative flex items-center gap-2 py-2 pl-3 ${isLocked ? "bg-amber-50/40 -mx-1 pr-1 rounded" : ""}`}
+              className={`flex items-center gap-2 py-2 ${isLocked ? "bg-amber-50/40 -mx-1 px-1 rounded" : ""}`}
             >
-              <span aria-hidden className={`absolute left-0 top-1.5 bottom-1.5 w-1 rounded ${macroStripe}`} title={`Dominant: ${macro}`} />
               <button
                 onClick={() => onToggleLock(it.ingredientId)}
                 title={isLocked ? t("unlock_row", lang) : t("lock_row", lang)}

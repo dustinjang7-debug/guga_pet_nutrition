@@ -178,6 +178,12 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
+## v0.4.3 — Revert macro color stripe (kept sort)
+
+- [x] RecipeItemsList: remove stripe + legend
+- [x] WizardPage RecipeSoFar: remove stripe + legend
+- [x] Keep shared/macroColor.ts + tests (helper retained for future category-based palette)
+
 ## v0.4.2 — Sort + macro color code in Current Recipe
 
 - [x] Add `shared/macroColor.ts` (dominant-macro helper) + vitest (8 cases)
