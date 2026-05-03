@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
+import { ExportPdfButton } from "@/components/ExportPdfButton";
 import { ingredientName, t, useLang } from "@/lib/i18n";
 import {
   type AafcoRow, aafcoComparison, carbKcalShare, type CarbKcalShare,
@@ -269,6 +270,7 @@ export default function WizardPage() {
           itemsCount={items.length}
           isEditing={isEditing}
           isSetup={isSetup}
+          recipeId={isEditing ? recipeId : undefined}
         />
 
         {/* Setup phase: pet profile + starting volume only */}
@@ -508,6 +510,7 @@ function WizardHeader({
   itemsCount,
   isEditing,
   isSetup,
+  recipeId,
 }: {
   stepIdx: number;
   totalSteps: number;
@@ -517,6 +520,7 @@ function WizardHeader({
   itemsCount: number;
   isEditing: boolean;
   isSetup: boolean;
+  recipeId: number | undefined;
 }) {
   const [lang] = useLang();
   const progressPct = isSetup ? 0 : ((stepIdx + 1) / totalSteps) * 100;
@@ -553,10 +557,13 @@ function WizardHeader({
           <Progress value={progressPct} className="h-1.5" />
         </div>
       </div>
-      <Button onClick={onOpenSave} disabled={itemsCount === 0 || isSaving}>
-        {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-        {isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}
-      </Button>
+      <div className="flex items-center gap-2">
+        <ExportPdfButton recipeId={recipeId} />
+        <Button onClick={onOpenSave} disabled={itemsCount === 0 || isSaving}>
+          {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          {isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}
+        </Button>
+      </div>
     </div>
   );
 }

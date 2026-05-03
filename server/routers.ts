@@ -11,6 +11,7 @@ import {
   listRecipesByUser,
   updateRecipe,
 } from "./db";
+import { generateRecipePdf } from "./pdfExport";
 
 const recipeItemSchema = z.object({
   ingredientId: z.number().int().positive(),
@@ -113,7 +114,52 @@ export const appRouter = router({
         await deleteRecipe(ctx.user.id, input.id);
         return { success: true } as const;
       }),
+
+    /**
+     * Export an EN/ZH/TH PDF for a saved recipe.
+     *
+     * Uses a tRPC mutation (not query) because (a) PDF generation is a
+     * non-idempotent side effect from the user's perspective and (b) the
+     * superjson transformer happily moves Buffers across the wire as base64.
+     */
+    exportPdf: protectedProcedure
+      .input(z.object({
+        id: z.number().int().positive(),
+        lang: z.enum(["en", "zh", "th"]).default("en"),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const r = await getRecipeById(ctx.user.id, input.id);
+        if (!r) throw new TRPCError({ code: "NOT_FOUND", message: "Recipe not found" });
+        const pdf = await generateRecipePdf({
+          lang: input.lang,
+          recipe: {
+            name: r.name,
+            petName: r.petName ?? null,
+            species: r.species as "dog" | "cat",
+            lifeStageKey: r.lifeStage,
+            bodyWeightKg: Number(r.bodyWeightKg),
+            lifeStageFactor: Number(r.lifeStageFactor),
+            items: (r.items as { ingredientId: number; grams: number }[]) ?? [],
+            notes: r.notes ?? null,
+            status: (r.status as "draft" | "approved") ?? "draft",
+            updatedAt: r.updatedAt ?? null,
+          },
+        });
+        return {
+          base64: pdf.toString("base64"),
+          filename: `GUGA_${slugify(r.name)}_${input.lang}.pdf`,
+        };
+      }),
   }),
 });
+
+function slugify(s: string): string {
+  return s
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9-_]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "recipe";
+}
 
 export type AppRouter = typeof appRouter;

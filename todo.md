@@ -178,6 +178,20 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
+## v0.5.0 — PDF export (EN/ZH/TH)
+
+- [x] Picked PDFKit (server-side, no React DOM dep)
+- [x] Bundled Noto Sans (en), Noto Sans SC (zh), Sarabun (th — bundles Latin)
+- [x] tRPC `recipes.exportPdf` (id + lang) returns base64 + filename
+- [x] PDF: Summary + Current Recipe + AAFCO comparison + Gap suggestions
+- [x] Header with green G logo + generated date
+- [x] Status pills: green=OK, amber=close, red=below, purple=above
+- [x] ExportPdfButton with EN/ZH/TH radio dialog
+- [x] Wired into RecipeBuilder header + WizardHeader (disabled until saved)
+- [x] vitest 4 cases: EN/ZH/TH happy path + zero-ingredient edge
+- [x] Filename: `GUGA_<slug>_<lang>.pdf`
+- [x] Visual QA: all 3 langs render glyphs correctly
+
 ## v0.4.3 — Revert macro color stripe (kept sort)
 
 - [x] RecipeItemsList: remove stripe + legend

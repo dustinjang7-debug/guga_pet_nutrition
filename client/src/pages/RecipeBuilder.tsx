@@ -20,6 +20,7 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { Save, Loader2 } from "lucide-react";
 
+import { ExportPdfButton } from "@/components/ExportPdfButton";
 import { PetProfilePane, defaultPetProfile, type PetProfileState } from "@/components/recipe/PetProfile";
 import { VolumeAndTargets, type MacroTargets } from "@/components/recipe/VolumeAndTargets";
 import { StartingVolumeStrip } from "@/components/recipe/StartingVolumeStrip";
@@ -194,6 +195,7 @@ export default function RecipeBuilder() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            <ExportPdfButton recipeId={isEditing ? recipeId : undefined} />
             <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
               <DialogTrigger asChild>
                 <Button disabled={items.length === 0 || isSaving}>
