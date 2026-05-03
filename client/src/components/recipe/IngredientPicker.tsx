@@ -6,7 +6,7 @@ import {
 import { ingredientName, type Lang, t } from "@/lib/i18n";
 import type { Ingredient } from "@shared/ingredients";
 import { INGREDIENTS } from "@shared/ingredients";
-import { ArrowDown, ArrowUp, Plus, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const SORTABLE_NUTRIENTS: { key: keyof Ingredient | "name"; label_en: string; label_zh: string; label_th: string; unit?: string }[] = [
@@ -57,6 +57,7 @@ export function IngredientPicker({
   const [category, setCategory] = useState<string>("all");
   const [sortKey, setSortKey] = useState<string>(presetSort ?? "name");
   const [sortDesc, setSortDesc] = useState(true);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -111,26 +112,46 @@ export function IngredientPicker({
         />
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-3">
+      <div className="mb-3">
         <button
-          onClick={() => setCategory("all")}
-          className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-            category === "all" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
-          }`}
+          type="button"
+          onClick={() => setCategoriesOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md hover:bg-secondary/60 transition-colors"
+          aria-expanded={categoriesOpen}
         >
-          {t("category_all", lang)}
+          <span className="text-xs text-muted-foreground">
+            {t("categories_label", lang)}
+            <span className="ml-2 text-foreground font-medium">
+              {category === "all" ? t("category_all", lang) : category}
+            </span>
+          </span>
+          <ChevronDown
+            className={`size-4 text-muted-foreground transition-transform ${categoriesOpen ? "rotate-180" : ""}`}
+          />
         </button>
-        {categories.map((c) => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-              category === c ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {c}
-          </button>
-        ))}
+        {categoriesOpen && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            <button
+              onClick={() => { setCategory("all"); setCategoriesOpen(false); }}
+              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                category === "all" ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t("category_all", lang)}
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => { setCategory(c); setCategoriesOpen(false); }}
+                className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                  category === c ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border/60">

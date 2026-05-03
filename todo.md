@@ -275,6 +275,12 @@
 - [ ] Vitest coverage: signup, login, wrong-password rejection, session round-trip
 - [ ] Update README snippet about auth
 
+## v0.6.5 — Add Spirulina dried (USDA FDC)
+
+- [x] Look up USDA FDC ID for Spirulina, dried (FDC 170495, NDB 11667, SR Legacy)
+- [x] Add as id 243 to shared/ingredients.ts with EN/ZH/TH names + full nutrient profile
+- [x] Run pnpm test (124/124 pass)
+
 ## Replit migration handoff
 
 - [ ] Inventory Manus-specific dependencies (OAuth, env, context, storage, LLM, notification, forge)
@@ -282,3 +288,17 @@
 - [ ] Package source snapshot (zip) excluding node_modules, .env, .manus-logs
 - [ ] Deliver both to user
 
+
+## v0.6.6 — Hotfix React #185 on /premix/new
+
+- [ ] Reproduce React error #185 (max update depth exceeded) on /premix/new
+- [ ] Identify offending setState-in-render or unstable effect deps in PremixComposer
+- [ ] Fix and verify dev + tests
+- [ ] Save checkpoint, ask user to publish
+
+## v0.6.7 — Collapse category chips in Ingredient Picker
+
+- [x] Make category chip group collapsible with header toggle (Categories: All ▾)
+- [x] Default collapsed; expand restores full chip grid
+- [x] Selecting a chip auto-collapses; clicking header re-expands
+- [x] EN/ZH/TH labels for "Categories" + active chip name

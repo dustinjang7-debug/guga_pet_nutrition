@@ -63,6 +63,7 @@ const DICT = {
     direction_asc: "Lowest first",
     direction_desc: "Highest first",
     category_all: "All",
+    categories_label: "Categories",
 
     // Recipe view
     recipe_items: "Recipe ingredients",
@@ -211,6 +212,7 @@ const DICT = {
     direction_asc: "由低到高",
     direction_desc: "由高到低",
     category_all: "全部",
+    categories_label: "分类",
 
     recipe_items: "配方食材",
     no_items: "尚未添加食材。请在下方添加第一种。",
@@ -354,6 +356,7 @@ const DICT = {
     direction_asc: "น้อยไปมาก",
     direction_desc: "มากไปน้อย",
     category_all: "ทั้งหมด",
+    categories_label: "หมวดหมู่",
 
     recipe_items: "วัตถุดิบในสูตร",
     no_items: "ยังไม่มีวัตถุดิบ เพิ่มรายการแรกด้านล่าง",
