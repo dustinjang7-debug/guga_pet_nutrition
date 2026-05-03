@@ -3,16 +3,21 @@ import { Input } from "@/components/ui/input";
 import { ingredientName, type Lang, t } from "@/lib/i18n";
 import type { RecipeItem } from "@shared/calc";
 import { INGREDIENT_BY_ID } from "@shared/ingredients";
+import { dominantMacro, MACRO_COLORS } from "@shared/macroColor";
 import { gramsToPct, rebalanceByPct } from "@shared/rebalance";
 import { Lock, Trash2, Unlock } from "lucide-react";
+import { useMemo } from "react";
 
 /**
- * Current Recipe panel — % based.
+ * Current Recipe panel — % based, sorted high → low, color-coded by dominant macro.
  *
  * Each row shows its share of the total recipe weight. Editing a % redistributes
  * the delta across the other unlocked rows pro-rata; locked rows hold their grams.
  * Total weight is preserved across edits — the "Total: NNNg" badge in the header
  * is informational only.
+ *
+ * Visual sort and the color stripe are derived state — the underlying `items`
+ * array preserves insertion order so save/load is stable.
  *
  * Adding a new ingredient still happens in grams via the IngredientPicker.
  * The added grams expand the total; existing % shares shrink proportionally.
@@ -45,6 +50,13 @@ export function RecipeItemsList({
 
   const total = items.reduce((s, i) => s + i.grams, 0);
 
+  // Display order: highest grams first. Underlying `items` array keeps
+  // insertion order so persistence stays stable.
+  const sorted = useMemo(
+    () => [...items].sort((a, b) => b.grams - a.grams),
+    [items],
+  );
+
   function handlePctChange(ingredientId: number, raw: string) {
     const pct = parseFloat(raw);
     if (Number.isNaN(pct)) return;
@@ -68,22 +80,32 @@ export function RecipeItemsList({
             {items.length} {t("ingredients_count", lang)} · {t("total_label", lang)} {total.toFixed(0)} g
           </span>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-1">{t("rebalance_hint", lang)}</p>
+        <div className="flex items-center justify-between gap-3 mt-1">
+          <p className="text-[11px] text-muted-foreground">{t("rebalance_hint", lang)}</p>
+          <MacroLegend />
+        </div>
       </div>
 
       <div className="divide-y divide-border/60">
-        {items.map(item => {
+        {sorted.map(item => {
           const ing = INGREDIENT_BY_ID[item.ingredientId];
           if (!ing) return null;
           const pct = gramsToPct(item.grams, total);
           const isLocked = locks.has(item.ingredientId);
+          const macro = dominantMacro(ing);
+          const macroColor = MACRO_COLORS[macro];
           return (
             <div
               key={item.ingredientId}
-              className={`flex items-center gap-3 px-5 py-3 transition-colors ${
+              className={`relative flex items-center gap-3 pl-6 pr-5 py-3 transition-colors ${
                 isLocked ? "bg-amber-50/40" : "hover:bg-secondary/30"
               }`}
             >
+              <span
+                aria-hidden
+                className={`absolute left-0 top-0 bottom-0 w-1.5 ${macroColor.stripe}`}
+                title={`Dominant: ${macro}`}
+              />
               <button
                 onClick={() => onToggleLock(item.ingredientId)}
                 title={isLocked ? t("unlock_row", lang) : t("lock_row", lang)}
@@ -129,5 +151,27 @@ export function RecipeItemsList({
         })}
       </div>
     </Card>
+  );
+}
+
+/**
+ * Three-dot legend used in the panel header so the colored stripes are decodable
+ * without hover. Compact enough to sit inline with the rebalance hint.
+ */
+function MacroLegend() {
+  const items: Array<{ key: keyof typeof MACRO_COLORS; label: string }> = [
+    { key: "protein", label: "Protein" },
+    { key: "fat", label: "Fat" },
+    { key: "carb", label: "Carbs" },
+  ];
+  return (
+    <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
+      {items.map(({ key, label }) => (
+        <span key={key} className="inline-flex items-center gap-1">
+          <span className={`size-2 rounded-full ${MACRO_COLORS[key].dot}`} />
+          {label}
+        </span>
+      ))}
+    </div>
   );
 }

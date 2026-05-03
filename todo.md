@@ -178,6 +178,14 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
+## v0.4.2 — Sort + macro color code in Current Recipe
+
+- [x] Add `shared/macroColor.ts` (dominant-macro helper) + vitest (8 cases)
+- [x] RecipeItemsList: sort by % desc, left color stripe by dominant macro
+- [x] Wizard RecipeSoFar: sort by % desc, left color stripe by dominant macro
+- [x] Tiny legend in panel header (P/F/C dots)
+- [x] @source for shared/ added to index.css so Tailwind picks classes from helper
+
 ## v0.4.1 — Replace Manus OAuth with email+password auth (deferred)
 
 - [ ] Add `passwordHash` + `email` (unique) columns to `users` table and migrate
