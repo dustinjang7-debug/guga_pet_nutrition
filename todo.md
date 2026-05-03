@@ -178,6 +178,14 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
+## v0.5.1 — Scale to 1000g when all rows locked
+
+- [x] `shared/scaleToVolume.ts` pure helper + 7 vitest cases
+- [x] RecipeItemsList: scale button when `lockedCount === itemCount > 0`
+- [x] Wizard RecipeSoFar: same trigger + button
+- [x] After scaling, clear locks (so user can keep editing)
+- [x] i18n keys EN/ZH/TH (`scale_to_1000g`, `scale_hint_all_locked`)
+
 ## v0.5.0 — PDF export (EN/ZH/TH)
 
 - [x] Picked PDFKit (server-side, no React DOM dep)

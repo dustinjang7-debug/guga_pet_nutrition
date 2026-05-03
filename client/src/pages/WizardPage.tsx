@@ -43,6 +43,7 @@ import {
   Unlock, X,
 } from "lucide-react";
 import { rebalanceByPct } from "@shared/rebalance";
+import { scaleToVolume } from "@shared/scaleToVolume";
 
 import {
   PetProfilePane, defaultPetProfile, type PetProfileState,
@@ -311,6 +312,7 @@ export default function WizardPage() {
                   locks={locks}
                   onItemsChange={setItems}
                   onToggleLock={toggleLock}
+                  onClearLocks={() => setLocks(new Set())}
                   onRemove={removeItemAndLock}
                 />
               </div>
@@ -1201,12 +1203,14 @@ function RecipeSoFar({
   locks,
   onItemsChange,
   onToggleLock,
+  onClearLocks,
   onRemove,
 }: {
   items: RecipeItem[];
   locks: Set<number>;
   onItemsChange: (next: RecipeItem[]) => void;
   onToggleLock: (id: number) => void;
+  onClearLocks: () => void;
   onRemove: (id: number) => void;
 }) {
   const [lang] = useLang();
@@ -1245,6 +1249,19 @@ function RecipeSoFar({
         </span>
       </div>
       <p className="text-[11px] text-muted-foreground mb-2">{t("rebalance_hint", lang)}</p>
+      {items.length > 0 && items.every((i) => locks.has(i.ingredientId)) && (
+        <button
+          onClick={() => {
+            onItemsChange(scaleToVolume(items, 1000));
+            onClearLocks();
+          }}
+          className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          title={t("scale_hint_all_locked", lang)}
+        >
+          <Maximize2 className="size-3" />
+          {t("scale_to_1000g", lang)}
+        </button>
+      )}
       <div className="divide-y divide-border">
         {sorted.map((it) => {
           const ing = INGREDIENT_BY_ID[it.ingredientId];

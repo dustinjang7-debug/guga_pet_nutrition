@@ -278,6 +278,7 @@ export default function RecipeBuilder() {
               locks={locks}
               onItemsChange={setItems}
               onToggleLock={toggleLock}
+              onClearLocks={() => setLocks(new Set())}
               onRemove={removeItem}
               lang={lang}
             />

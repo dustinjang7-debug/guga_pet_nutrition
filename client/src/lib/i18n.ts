@@ -129,6 +129,8 @@ const DICT = {
     unlock_row: "Unlock",
     pct_of_recipe: "% of recipe",
     rebalance_hint: "Edit any % — locked rows hold; unlocked rows absorb the change.",
+    scale_to_1000g: "Scale to 1000 g",
+    scale_hint_all_locked: "All rows locked. Rescale total weight to 1000 g while preserving ratios.",
     total_label: "Total",
 
     // Wizard setup
@@ -248,7 +250,9 @@ const DICT = {
     lock_row: "锁定",
     unlock_row: "解锁",
     pct_of_recipe: "占比 %",
-    rebalance_hint: "修改任意 %，已锁定行保持不变，未锁定行按比例分摊变化。",
+     rebalance_hint: "编辑任意 % — 锁定行保持不变；未锁定行吸收差值。",
+    scale_to_1000g: "缩放至 1000 g",
+    scale_hint_all_locked: "所有行已锁定。按比例将总重量缩放至 1000 g。",
     total_label: "总计",
 
     // Wizard setup
@@ -368,7 +372,9 @@ const DICT = {
     lock_row: "ล็อก",
     unlock_row: "ปลดล็อก",
     pct_of_recipe: "% ของสูตร",
-    rebalance_hint: "แก้ % ใดก็ได้ แถวที่ล็อกจะคงที่ แถวที่ไม่ล็อกจะถูกปรับตามสัดส่วน",
+       rebalance_hint: "แก้ไข % ใดๆ — แถวที่ล็อกจะคงที่ แถวที่ไม่ได้ล็อกจะปรับตาม",
+    scale_to_1000g: "ปรับเป็น 1000 g",
+    scale_hint_all_locked: "ล็อกทุกแถวแล้ว ปรับน้ำหนักรวมเป็น 1000 g โดยคงสัดส่วนเดิม",
     total_label: "รวม",
 
     // Wizard setup

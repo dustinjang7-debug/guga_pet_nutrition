@@ -4,7 +4,8 @@ import { ingredientName, type Lang, t } from "@/lib/i18n";
 import type { RecipeItem } from "@shared/calc";
 import { INGREDIENT_BY_ID } from "@shared/ingredients";
 import { gramsToPct, rebalanceByPct } from "@shared/rebalance";
-import { Lock, Trash2, Unlock } from "lucide-react";
+import { scaleToVolume } from "@shared/scaleToVolume";
+import { Lock, Maximize2, Trash2, Unlock } from "lucide-react";
 import { useMemo } from "react";
 
 /**
@@ -26,6 +27,7 @@ export function RecipeItemsList({
   locks,
   onItemsChange,
   onToggleLock,
+  onClearLocks,
   onRemove,
   lang,
 }: {
@@ -36,6 +38,8 @@ export function RecipeItemsList({
   onItemsChange: (next: RecipeItem[]) => void;
   /** Toggle the lock state for one ingredient. */
   onToggleLock: (ingredientId: number) => void;
+  /** Clear all locks (called after Scale-to-1000g so user can keep editing). */
+  onClearLocks: () => void;
   onRemove: (ingredientId: number) => void;
   lang: Lang;
 }) {
@@ -55,6 +59,13 @@ export function RecipeItemsList({
     () => [...items].sort((a, b) => b.grams - a.grams),
     [items],
   );
+
+  const allLocked = items.length > 0 && items.every(i => locks.has(i.ingredientId));
+
+  function handleScaleTo1000() {
+    onItemsChange(scaleToVolume(items, 1000));
+    onClearLocks();
+  }
 
   function handlePctChange(ingredientId: number, raw: string) {
     const pct = parseFloat(raw);
@@ -80,6 +91,16 @@ export function RecipeItemsList({
           </span>
         </div>
         <p className="text-[11px] text-muted-foreground mt-1">{t("rebalance_hint", lang)}</p>
+        {allLocked && (
+          <button
+            onClick={handleScaleTo1000}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            title={t("scale_hint_all_locked", lang)}
+          >
+            <Maximize2 className="size-3" />
+            {t("scale_to_1000g", lang)}
+          </button>
+        )}
       </div>
 
       <div className="divide-y divide-border/60">
