@@ -178,6 +178,15 @@
 - [x] Wizard RecipeSoFar untouched (still grams)
 - [x] i18n keys EN/ZH/TH (lock_row, unlock_row, pct_of_recipe, rebalance_hint, total_label)
 
+## v0.6.2 — Typeable % input + manual sort
+
+- [ ] RecipeItemsList: replace stepper-only % with typeable input (commit on blur + Enter, 1-decimal max, clamp to slack)
+- [ ] Remove auto-sort by % desc; replace with a "Sort by %" button in panel header
+- [ ] Apply same UX to Wizard's RecipeSoFar
+- [ ] Premix Composer inherits from RecipeItemsList (no separate change)
+- [ ] vitest: blur commits, Enter commits, clamp at slack, decimals
+- [ ] i18n keys EN/ZH/TH (sort_by_pct)
+
 ## v0.6.1 — Premix Composer DER display
 
 - [ ] Compare Simple Composer DER display block to Premix Composer

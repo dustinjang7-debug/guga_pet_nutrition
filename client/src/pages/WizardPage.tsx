@@ -41,6 +41,7 @@ import {
   ArrowLeft, ArrowRight, Check, ChevronRight, FlaskConical, Leaf,
   ListChecks, Loader2, Lock, Maximize2, Pencil, Save, Search, Sparkles,
   Unlock, X,
+  ArrowDownWideNarrow,
 } from "lucide-react";
 import { rebalanceByPct } from "@shared/rebalance";
 import { scaleToVolume } from "@shared/scaleToVolume";
@@ -1214,6 +1215,7 @@ function RecipeSoFar({
   onRemove: (id: number) => void;
 }) {
   const [lang] = useLang();
+  const [sortByPct, setSortByPct] = useState(false);
   if (items.length === 0) {
     return (
       <Card className="p-5 text-sm text-muted-foreground italic border-dashed">
@@ -1222,19 +1224,20 @@ function RecipeSoFar({
     );
   }
   const total = items.reduce((s, i) => s + i.grams, 0);
-  // Display order: highest grams first. Underlying `items` keeps insertion
-  // order so persistence stays stable.
-  const sorted = [...items].sort((a, b) => b.grams - a.grams);
+  const display = sortByPct
+    ? [...items].sort((a, b) => b.grams - a.grams)
+    : items;
+  const allLocked = items.length > 0 && items.every((i) => locks.has(i.ingredientId));
 
-  function handlePctChange(ingredientId: number, raw: string) {
-    const pct = parseFloat(raw);
-    if (Number.isNaN(pct)) return;
+  function handleCommitPct(ingredientId: number, pct: number) {
+    if (Number.isNaN(pct) || pct < 0) return;
+    const rounded = Math.round(pct * 10) / 10;
     const annotated = items.map((i) => ({
       ingredientId: i.ingredientId,
       grams: i.grams,
       locked: locks.has(i.ingredientId),
     }));
-    const next = rebalanceByPct(annotated, ingredientId, pct);
+    const next = rebalanceByPct(annotated, ingredientId, rounded);
     onItemsChange(next.map(({ ingredientId, grams }) => ({ ingredientId, grams })));
   }
 
@@ -1249,21 +1252,35 @@ function RecipeSoFar({
         </span>
       </div>
       <p className="text-[11px] text-muted-foreground mb-2">{t("rebalance_hint", lang)}</p>
-      {items.length > 0 && items.every((i) => locks.has(i.ingredientId)) && (
+      <div className="mb-2 flex items-center gap-2 flex-wrap">
         <button
-          onClick={() => {
-            onItemsChange(scaleToVolume(items, 1000));
-            onClearLocks();
-          }}
-          className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-          title={t("scale_hint_all_locked", lang)}
+          onClick={() => setSortByPct((s) => !s)}
+          className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${
+            sortByPct
+              ? "bg-primary/15 text-primary hover:bg-primary/25"
+              : "bg-secondary text-foreground/80 hover:bg-secondary/70"
+          }`}
+          title={t("sort_by_pct_hint", lang)}
         >
-          <Maximize2 className="size-3" />
-          {t("scale_to_1000g", lang)}
+          <ArrowDownWideNarrow className="size-3" />
+          {t("sort_by_pct", lang)}
         </button>
-      )}
+        {allLocked && (
+          <button
+            onClick={() => {
+              onItemsChange(scaleToVolume(items, 1000));
+              onClearLocks();
+            }}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            title={t("scale_hint_all_locked", lang)}
+          >
+            <Maximize2 className="size-3" />
+            {t("scale_to_1000g", lang)}
+          </button>
+        )}
+      </div>
       <div className="divide-y divide-border">
-        {sorted.map((it) => {
+        {display.map((it) => {
           const ing = INGREDIENT_BY_ID[it.ingredientId];
           if (!ing) return null;
           const pct = total > 0 ? (it.grams / total) * 100 : 0;
@@ -1290,16 +1307,11 @@ function RecipeSoFar({
                   {ing.category} · {it.grams.toFixed(0)} g
                 </div>
               </div>
-              <Input
-                type="number"
-                value={pct.toFixed(1)}
-                onChange={(e) => handlePctChange(it.ingredientId, e.target.value)}
-                step={0.5}
-                min={0}
-                max={100}
-                className="w-20 h-8 text-right"
-                data-numeric="true"
+              <PctInputDraft
+                pct={pct}
                 disabled={isLocked}
+                onCommit={(next) => handleCommitPct(it.ingredientId, next)}
+                title={isLocked ? t("unlock_row", lang) : t("pct_of_recipe", lang)}
               />
               <span className="text-xs text-muted-foreground">%</span>
               <Button
@@ -1315,6 +1327,67 @@ function RecipeSoFar({
         })}
       </div>
     </Card>
+  );
+}
+
+function PctInputDraft({
+  pct,
+  disabled,
+  onCommit,
+  title,
+}: {
+  pct: number;
+  disabled: boolean;
+  onCommit: (pct: number) => void;
+  title: string;
+}) {
+  const formatted = pct.toFixed(1);
+  const [draft, setDraft] = useState(formatted);
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!editing) setDraft(formatted);
+  }, [formatted, editing]);
+  function commit() {
+    setEditing(false);
+    const parsed = parseFloat(draft);
+    if (Number.isNaN(parsed)) {
+      setDraft(formatted);
+      return;
+    }
+    onCommit(parsed);
+  }
+  return (
+    <Input
+      type="text"
+      inputMode="decimal"
+      value={draft}
+      data-numeric="true"
+      onFocus={(e) => {
+        setEditing(true);
+        e.currentTarget.select();
+      }}
+      onChange={(e) => {
+        const cleaned = e.target.value.replace(/[^\d.]/g, "");
+        const parts = cleaned.split(".");
+        const next = parts.length > 1
+          ? `${parts[0]}.${parts.slice(1).join("").slice(0, 1)}`
+          : cleaned;
+        setDraft(next);
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        } else if (e.key === "Escape") {
+          setDraft(formatted);
+          setEditing(false);
+          e.currentTarget.blur();
+        }
+      }}
+      className="w-20 h-8 text-right"
+      disabled={disabled}
+      title={title}
+    />
   );
 }
 

@@ -131,6 +131,8 @@ const DICT = {
     rebalance_hint: "Edit any % — locked rows hold; unlocked rows absorb the change.",
     scale_to_1000g: "Scale to 1000 g",
     scale_hint_all_locked: "All rows locked. Rescale total weight to 1000 g while preserving ratios.",
+    sort_by_pct: "Sort by %",
+    sort_by_pct_hint: "Toggle: largest % first vs. insertion order.",
     total_label: "Total",
 
     // Wizard setup
@@ -262,6 +264,8 @@ const DICT = {
      rebalance_hint: "编辑任意 % — 锁定行保持不变；未锁定行吸收差值。",
     scale_to_1000g: "缩放至 1000 g",
     scale_hint_all_locked: "所有行已锁定。按比例将总重量缩放至 1000 g。",
+    sort_by_pct: "按 % 排序",
+    sort_by_pct_hint: "切换：最大 % 在前，或按添加顺序。",
     total_label: "总计",
 
     // Wizard setup
@@ -393,6 +397,8 @@ const DICT = {
        rebalance_hint: "แก้ไข % ใดๆ — แถวที่ล็อกจะคงที่ แถวที่ไม่ได้ล็อกจะปรับตาม",
     scale_to_1000g: "ปรับเป็น 1000 g",
     scale_hint_all_locked: "ล็อกทุกแถวแล้ว ปรับน้ำหนักรวมเป็น 1000 g โดยคงสัดส่วนเดิม",
+    sort_by_pct: "เรียงตาม %",
+    sort_by_pct_hint: "สลับ: % มากที่สุดก่อน หรือตามลำดับที่เพิ่ม",
     total_label: "รวม",
 
     // Wizard setup
