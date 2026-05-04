@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { Save, Loader2 } from "lucide-react";
 
 import { ExportPdfButton } from "@/components/ExportPdfButton";
+import { RebalanceSheet } from "@/components/recipe/RebalanceSheet";
+import { Sparkles } from "lucide-react";
 import { PetProfilePane, defaultPetProfile, type PetProfileState } from "@/components/recipe/PetProfile";
 import { VolumeAndTargets, type MacroTargets } from "@/components/recipe/VolumeAndTargets";
 import { StartingVolumeStrip } from "@/components/recipe/StartingVolumeStrip";
@@ -39,6 +41,7 @@ export default function RecipeBuilder() {
 
   // Pet + targets state
   const [pet, setPet] = useState<PetProfileState>(defaultPetProfile());
+  const [rebalanceOpen, setRebalanceOpen] = useState(false);
   const [startingVolume, setStartingVolume] = useState(1000);
   const [targets, setTargets] = useState<MacroTargets>({ proteinPct: 45, carbPct: 25 });
 
@@ -195,6 +198,12 @@ export default function RecipeBuilder() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {isEditing && items.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setRebalanceOpen(true)}>
+                <Sparkles className="size-4" />
+                {t("rebalance_title", lang)}
+              </Button>
+            )}
             <ExportPdfButton recipeId={isEditing ? recipeId : undefined} />
             <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
               <DialogTrigger asChild>
@@ -341,6 +350,15 @@ export default function RecipeBuilder() {
                 return [...prev, { ingredientId, grams }];
               });
               setFixForKey(null);
+            }}
+          />
+          <RebalanceSheet
+            open={rebalanceOpen}
+            onOpenChange={setRebalanceOpen}
+            items={items}
+            onApply={(newItems) => {
+              setItems(newItems);
+              toast.success(t("rebalance_apply", lang) + " ✓");
             }}
           />
         </div>

@@ -361,3 +361,16 @@
 - [x] SummaryCard now receives totalsWithPremix + macrosWithPremix so Ca:P + P/F/C % reflect bowl contents
 - [x] daily.feedingGrams still derived from fresh-only to keep React #185 loop broken
 - [x] 124/124 tests pass
+
+## v0.7.0 — Macro Rebalance for saved recipes (Wizard + Simple Composer only)
+
+- [ ] Build shared/macroSolver.ts: bounded least-squares solver for P/F/C %
+- [ ] Inputs: items, locks, target {proteinPct, fatPct, carbPct}, basis "dm"
+- [ ] Outputs: new grams per unlocked item, achieved %, residual error, status (solved | infeasible | partial)
+- [ ] Vitest tests covering: simple 2-ingredient case, infeasible target (no fat source), all-locked, premix-loaded recipe
+- [ ] RebalanceSheet UI: opens from RecipeBuilder when editing saved recipe + from recipe card
+- [ ] EN/ZH/TH labels
+- [ ] Apply button writes new grams to items state, user re-saves
+- [ ] Block from Premix Composer entry points
+- [ ] Tests pass
+- [ ] Save checkpoint
