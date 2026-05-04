@@ -331,15 +331,19 @@
 
 ## v0.6.13 — Exclude premix from DM/macro/daily calc (architectural fix for #185)
 
-User directive: premix should NEVER feed back into totals/macros/daily/AAFCO computations on Premix Composer. It's a locked output sized after fresh ingredients are decided. This breaks the feedback loop at its root.
+- [x] freshItems = items.filter(!PREMIX)
+- [x] totals/macros/daily/aafco computed from freshItems only
+- [x] items full list still used for display, DB save, PDF export
+- [x] freshSignature watcher kept (still useful for normalize-gate reset on user fresh edits)
+- [x] Verified cat 5kg + chicken breast — clean
+- [x] 124/124 tests pass
 
-- [ ] In PremixComposer, derive `freshItems = items.filter(i => !PREMIX_IDS.includes(...))`
-- [ ] Compute `totals`, `macros`, `daily`, `aafco` from `freshItems` (NOT items)
-- [ ] Keep `items` (full list incl. premix) only for: display in RecipeItemsList, save to DB, PDF export
-- [ ] Remove the freshSignature watcher (no longer needed once loop is broken)
-- [ ] Verify: cat 5kg + chicken breast → no #185
-- [ ] Verify: dog 10kg + zucchini + yogurt → no #185
-- [ ] Verify: weight changes 5→25 → no #185
-- [ ] Verify: SKU swap BASIC↔UPGRADE → no #185
-- [ ] Tests pass
-- [ ] Save checkpoint
+## v0.6.14 — Add 5 USDA fish oils with EN/ZH/TH names
+
+- [x] id 244 Cod liver oil — vit A 30000µg, vit D 250µg, vit E 20mg
+- [x] id 245 Herring oil
+- [x] id 246 Menhaden oil
+- [x] id 247 Salmon oil
+- [x] id 248 Sardine oil
+- [x] All Oil category, fat 100g/100g, kcal 902
+- [x] 124/124 tests pass
