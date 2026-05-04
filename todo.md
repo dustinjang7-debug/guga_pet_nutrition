@@ -347,3 +347,11 @@
 - [x] id 248 Sardine oil
 - [x] All Oil category, fat 100g/100g, kcal 902
 - [x] 124/124 tests pass
+
+## v0.6.15 — Nutrient profile preview with "Include premix" toggle on Premix Composer
+
+- [x] Toggle added above AAFCO panel (default OFF = fresh-only, ON = AAFCO-complete view)
+- [x] Both views computed independently; aafco rows swap based on toggle
+- [x] Toggle persists during session (component-local state)
+- [x] EN/ZH/TH labels added (include_premix_label/on/off)
+- [x] 124/124 tests pass

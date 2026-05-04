@@ -74,6 +74,10 @@ export default function PremixComposer() {
   const [notes, setNotes] = useState("");
   const [recipeStatus, setRecipeStatus] = useState<"draft" | "approved">("draft");
   const [basis, setBasis] = useState<"dm" | "me">("dm");
+  // Toggle: when true, AAFCO compliance includes the premix contribution
+  // so the user can verify the AAFCO-complete state. Default false (fresh
+  // ingredients only) so they can see how far the fresh recipe gets on its own.
+  const [includePremixInAafco, setIncludePremixInAafco] = useState<boolean>(false);
 
   // Premix-specific
   const [premixSku, setPremixSku] = useState<PremixSku>(PREMIX_BASIC_ID);
@@ -157,15 +161,26 @@ export default function PremixComposer() {
   }, [freshSignature]);
   const totals = useMemo(() => recipeTotals(freshItems), [freshItems]);
   const macros = useMemo(() => recipeMacros(freshItems, totals), [freshItems, totals]);
+  // Also compute the with-premix view so the user can flip to verify AAFCO
+  // completeness once the premix is folded in. Always derived from `items`
+  // (full list) but never fed back into `daily`/`premixGrams` so the loop
+  // stays broken.
+  const totalsWithPremix = useMemo(() => recipeTotals(items), [items]);
+  const macrosWithPremix = useMemo(() => recipeMacros(items, totalsWithPremix), [items, totalsWithPremix]);
   const stage =
     pet.species === "dog"
       ? DOG_LIFE_STAGES[pet.lifeStageKey as keyof typeof DOG_LIFE_STAGES]
       : CAT_LIFE_STAGES[pet.lifeStageKey as keyof typeof CAT_LIFE_STAGES];
   const isGrowth = stage?.isGrowth ?? false;
-  const aafco: AafcoRow[] = useMemo(
+  const aafcoFreshOnly: AafcoRow[] = useMemo(
     () => aafcoComparison(totals, macros, pet.species, isGrowth),
     [totals, macros, pet.species, isGrowth],
   );
+  const aafcoWithPremix: AafcoRow[] = useMemo(
+    () => aafcoComparison(totalsWithPremix, macrosWithPremix, pet.species, isGrowth),
+    [totalsWithPremix, macrosWithPremix, pet.species, isGrowth],
+  );
+  const aafco: AafcoRow[] = includePremixInAafco ? aafcoWithPremix : aafcoFreshOnly;
   const daily = useMemo(
     () => dailyFeed(pet.bodyWeightKg, pet.factor, macros),
     [pet.bodyWeightKg, pet.factor, macros],
@@ -493,6 +508,30 @@ export default function PremixComposer() {
 
           {/* Right: AAFCO + StartingVolume + Targets (same as Simple Composer) */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
+            {/* Premix-include toggle: lets user verify AAFCO completeness with premix folded in. */}
+            <div className="rounded-md border border-border bg-card px-3 py-2 flex items-center justify-between gap-3 text-xs">
+              <div className="flex flex-col">
+                <span className="font-medium">{t("include_premix_label", lang)}</span>
+                <span className="text-muted-foreground">
+                  {includePremixInAafco ? t("include_premix_on", lang) : t("include_premix_off", lang)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIncludePremixInAafco(v => !v)}
+                className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${
+                  includePremixInAafco ? "bg-primary" : "bg-muted"
+                }`}
+                aria-pressed={includePremixInAafco}
+                aria-label={t("include_premix_label", lang)}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-background shadow transition-transform ${
+                    includePremixInAafco ? "translate-x-5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
             <AafcoPanel
               rows={aafco}
               lang={lang}

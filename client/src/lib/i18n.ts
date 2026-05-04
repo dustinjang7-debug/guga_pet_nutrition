@@ -163,6 +163,9 @@ const DICT = {
     must_normalize_first: "Normalize to 1 day first",
     normalize_done: "Recipe normalized to 1 day",
     days_to_show: "Days to show",
+    include_premix_label: "Include premix in AAFCO",
+    include_premix_on: "On — showing AAFCO-complete view",
+    include_premix_off: "Off — showing fresh ingredients only",
   },
   zh: {
     appName: "GUGA 营养",
@@ -308,6 +311,9 @@ const DICT = {
     must_normalize_first: "请先标准化为 1 天量",
     normalize_done: "配方已标准化为 1 天量",
     days_to_show: "显示天数",
+    include_premix_label: "将预混料计入 AAFCO",
+    include_premix_on: "已开启 — 显示 AAFCO 完整状态",
+    include_premix_off: "已关闭 — 仅显示鲜食材料",
   },
   th: {
     appName: "GUGA Nutrition",
@@ -453,6 +459,9 @@ const DICT = {
     must_normalize_first: "กรุณาปรับเป็นปริมาณ 1 วันก่อน",
     normalize_done: "ปรับสูตรเป็นปริมาณ 1 วันแล้ว",
     days_to_show: "แสดงจำนวนวัน",
+    include_premix_label: "รวมพรีมิกซ์ใน AAFCO",
+    include_premix_on: "เปิด — แสดงข้อมูล AAFCO ครบถ้วน",
+    include_premix_off: "ปิด — แสดงเฉพาะวัตถุดิบ",
   },
 } as const;
 
