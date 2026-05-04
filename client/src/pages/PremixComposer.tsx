@@ -473,10 +473,13 @@ export default function PremixComposer() {
               lang={lang}
             />
 
+            {/* SummaryCard receives the premix-inclusive view so Ca:P reflects
+                what's actually in the bowl. `daily` is still derived from
+                fresh-only macros so the feeding-amount loop stays broken. */}
             <SummaryCard
-              macros={macros}
+              macros={macrosWithPremix}
               daily={daily}
-              totals={totals}
+              totals={totalsWithPremix}
               species={pet.species}
               isGrowth={isGrowth}
               lang={lang}

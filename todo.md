@@ -355,3 +355,9 @@
 - [x] Toggle persists during session (component-local state)
 - [x] EN/ZH/TH labels added (include_premix_label/on/off)
 - [x] 124/124 tests pass
+
+## v0.6.16 — Premix Composer Ca:P must include premix contribution
+
+- [x] SummaryCard now receives totalsWithPremix + macrosWithPremix so Ca:P + P/F/C % reflect bowl contents
+- [x] daily.feedingGrams still derived from fresh-only to keep React #185 loop broken
+- [x] 124/124 tests pass
