@@ -127,6 +127,44 @@ describe("solveRebalance", () => {
     expect(JSON.stringify(items)).toBe(before);
   });
 
+  it("floor rule: ingredient already below 2% of recipe stays at its starting % share", () => {
+    // Eggshell powder (id 79 in seed). Use chicken+sweet potato as macro carriers,
+    // and add a tiny eggshell-like supplement as a sub-2% item.
+    // Using oat (id 9) at very low grams to simulate a sub-2% supplement.
+    const items = [
+      { ingredientId: CHICKEN_BREAST_ID, grams: 400 },
+      { ingredientId: SWEET_POTATO_ID, grams: 195 },
+      { ingredientId: OAT_ID, grams: 5 }, // 5/600 = 0.83% of recipe (below 2%)
+    ];
+    const origTotal = items.reduce((s, i) => s + i.grams, 0);
+    const oatStartPct = 5 / origTotal;
+    const r = solveRebalance(items, new Set(), { proteinPct: 50, fatPct: 20, carbPct: 25 });
+    const oat = r.items.find(i => i.ingredientId === OAT_ID)!;
+    const newTotal = r.items.reduce((s, i) => s + i.grams, 0);
+    const oatNewPct = oat.grams / newTotal;
+    // Sub-2% items must NOT be allowed to drop below their starting %.
+    expect(oatNewPct).toBeGreaterThanOrEqual(oatStartPct - 0.001);
+  });
+
+  it("auto-locks items ≤2% of original recipe (treats them as user-locked)", () => {
+    // Total = 385 g; salmon oil at 5g = 1.3% ≤ 2% → should be auto-locked.
+    const items = [
+      { ingredientId: CHICKEN_BREAST_ID, grams: 200 },
+      { ingredientId: SALMON_ID, grams: 50 },
+      { ingredientId: SWEET_POTATO_ID, grams: 100 },
+      { ingredientId: OAT_ID, grams: 30 },
+      { ingredientId: SALMON_OIL_ID, grams: 5 }, // 1.3% — sub-2%, must be untouched
+    ];
+    const r = solveRebalance(items, new Set(), { proteinPct: 80, fatPct: 18, carbPct: 2 });
+    const oil = r.items.find(i => i.ingredientId === SALMON_OIL_ID)!;
+    // Sub-2% item should be preserved at its starting % of new total.
+    const newTotal = r.items.reduce((s, i) => s + i.grams, 0);
+    const newOilPct = oil.grams / newTotal;
+    const startOilPct = 5 / 385;
+    // Auto-locked items preserve their % share of recipe (lock-by-% semantics).
+    expect(Math.abs(newOilPct - startOilPct)).toBeLessThan(0.005);
+  });
+
   it("preserves the achieved macros that round-tripping through recipeMacros confirms", () => {
     const items = [
       { ingredientId: CHICKEN_BREAST_ID, grams: 200 },

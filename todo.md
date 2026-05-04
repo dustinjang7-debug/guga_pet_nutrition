@@ -383,3 +383,29 @@
 - [ ] Update solver tests for % locks
 - [ ] Verify in dev with 1 lock and 2 locks
 - [ ] Save checkpoint
+
+## v0.7.2 — Solver floor constraint (2% rule)
+
+- [ ] Per unlocked ingredient, new grams ≥ max(2% of new total recipe, item's starting % of starting total)
+- [ ] If item already <2% of recipe at start → effectively auto-locked (preserve % of recipe)
+- [ ] Update solver + add 2 tests (eggshell survives; ingredient already <2% untouched)
+- [ ] Verify in dev: bright recipe P 39→45 with no manual lock keeps eggshell ≈ 0.7%
+
+## v0.7.3 — Energy-density target in Macro Rebalance
+
+- [ ] Solver accepts optional kcalPerG target with ±0.2 tolerance
+- [ ] Default target = current recipe's kcal/g
+- [ ] Loss function adds (achievedKcalG − targetKcalG)² × weight when |delta|>0.2
+- [ ] UI: kcal/g input field below P/F/C inputs, seeded with current
+- [ ] Result panel shows achieved kcal/g + delta
+- [ ] Tests
+
+## v0.7.4 — Auto-lock micro ingredients (≤2% of recipe)
+
+- [ ] Solver auto-locks any item ≤2% of original recipe (no user action needed)
+- [ ] Solver only adjusts grams of >2% items
+- [ ] Macro % targets still apply to whole final recipe (incl. auto-locked)
+- [ ] Remove dynamic floor / runaway-prone code
+- [ ] Keep kcal/g target (Option A, ±0.2 tolerance)
+- [ ] Update tests
+- [ ] Save checkpoint

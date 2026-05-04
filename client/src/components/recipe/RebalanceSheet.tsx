@@ -44,6 +44,8 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
     const totals = recipeTotals(items);
     const m = recipeMacros(items, totals);
     const cap = caPhosphorusRatio(totals).ratio;
+    const totalG = items.reduce((s, i) => s + i.grams, 0);
+    const kcalG = totalG > 0 ? totals.energy_kcal / totalG : 0;
     const aafcoRows = aafcoComparison(totals, m, species, isGrowth);
     let met = 0, below = 0, over = 0;
     for (const r of aafcoRows) {
@@ -51,7 +53,7 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
       else if (r.status === "below") below++;
       else if (r.status === "above") over++;
     }
-    return { P: m.proteinPct_DM, F: m.fatPct_DM, C: m.carbPct_DM, caP: cap, aafco: { met, below, over } };
+    return { P: m.proteinPct_DM, F: m.fatPct_DM, C: m.carbPct_DM, kcalG, caP: cap, aafco: { met, below, over } };
   }, [items, species, isGrowth]);
 
   // Targets default to current macros so user starts from where they are.
@@ -59,6 +61,7 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
   const [targetP, setTargetP] = useState<string>(baseline.P.toFixed(1));
   const [targetF, setTargetF] = useState<string>(baseline.F.toFixed(1));
   const [targetC, setTargetC] = useState<string>(baseline.C.toFixed(1));
+  const [targetKcalG, setTargetKcalG] = useState<string>(baseline.kcalG.toFixed(2));
   const [lockedIds, setLockedIds] = useState<Set<number>>(new Set());
   const [solving, setSolving] = useState(false);
   const [result, setResult] = useState<RebalanceResult | null>(null);
@@ -67,6 +70,7 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
       setTargetP(baseline.P.toFixed(1));
       setTargetF(baseline.F.toFixed(1));
       setTargetC(baseline.C.toFixed(1));
+      setTargetKcalG(baseline.kcalG.toFixed(2));
       setResult(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,10 +90,12 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
     setSolving(true);
     // Defer to next tick so spinner paints before the solver hogs the thread.
     setTimeout(() => {
+      const kcalGNum = parseFloat(targetKcalG);
       const targets: MacroTargetsDM = {
         proteinPct: parseFloat(targetP),
         fatPct: parseFloat(targetF),
         carbPct: parseFloat(targetC),
+        kcalPerG: Number.isFinite(kcalGNum) && kcalGNum > 0 ? kcalGNum : null,
       };
       const r = solveRebalance(items, lockedIds, targets, {
         aafcoTarget: { species, isGrowth },
@@ -122,10 +128,11 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
           </p>
 
           {/* Target inputs */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <TargetInput label={t("target_protein", lang) + " %"} value={targetP} onChange={setTargetP} baseline={baseline.P} />
             <TargetInput label={t("target_fat", lang) + " %"} value={targetF} onChange={setTargetF} baseline={baseline.F} />
             <TargetInput label={t("target_carb", lang) + " %"} value={targetC} onChange={setTargetC} baseline={baseline.C} />
+            <TargetInput label="kcal / g" value={targetKcalG} onChange={setTargetKcalG} baseline={baseline.kcalG} step="0.05" max="10" decimals={2} />
           </div>
 
           {/* Lock toggles per ingredient */}
@@ -192,24 +199,25 @@ export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, o
 }
 
 function TargetInput({
-  label, value, onChange, baseline,
+  label, value, onChange, baseline, step = "0.5", max = "100", decimals = 1,
 }: {
   label: string; value: string; onChange: (v: string) => void; baseline: number;
+  step?: string; max?: string; decimals?: number;
 }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
       <Input
         type="number"
-        step="0.5"
+        step={step}
         min="0"
-        max="100"
+        max={max}
         value={value}
         onChange={e => onChange(e.target.value)}
         className="font-mono"
       />
       <div className="text-[10px] text-muted-foreground">
-        now {baseline.toFixed(1)}
+        now {baseline.toFixed(decimals)}
       </div>
     </div>
   );
@@ -236,10 +244,11 @@ function ResultPreview({
           {t(`rebalance_status_${result.status}` as never, lang)}
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-4 gap-2 text-xs">
         <AchievedCell label={t("target_protein", lang)} value={result.achieved.proteinPct} delta={result.delta.proteinPct} />
         <AchievedCell label={t("target_fat", lang)} value={result.achieved.fatPct} delta={result.delta.fatPct} />
         <AchievedCell label={t("target_carb", lang)} value={result.achieved.carbPct} delta={result.delta.carbPct} />
+        <KcalCell label="kcal / g" value={result.achieved.kcalPerG} />
       </div>
 
       {/* Ca:P + AAFCO summary */}
@@ -325,6 +334,15 @@ function AafcoCell({
       <div className={`text-[10px] tabular-nums ${regressed ? "text-destructive font-medium" : "text-muted-foreground"}`}>
         was {before.met} / {before.below}{regressed ? " ⚠" : ""}
       </div>
+    </div>
+  );
+}
+
+function KcalCell({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded bg-card p-2 text-center">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="font-mono text-base tabular-nums">{value.toFixed(2)}</div>
     </div>
   );
 }

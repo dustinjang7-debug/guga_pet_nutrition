@@ -37,7 +37,22 @@ export interface MacroTargetsDM {
   proteinPct: number | null;
   fatPct: number | null;
   carbPct: number | null;
+  /** Optional kcal-per-gram target. ±0.2 is treated as zero error; outside that
+   *  band the loss function adds (achieved - target)² × ENERGY_WEIGHT. */
+  kcalPerG?: number | null;
 }
+
+/** Tolerance band around kcal/g target before energy loss kicks in. */
+export const ENERGY_TOLERANCE = 0.2;
+
+function kcalPerG(items: RecipeItem[], totals: { energy_kcal: number }): number {
+  const g = items.reduce((s, i) => s + i.grams, 0);
+  return g > 0 ? totals.energy_kcal / g : 0;
+}
+
+/** How many "%-points squared" of loss each kcal/g overage equals. Calibrated
+ *  so a 0.5 kcal/g miss matters about as much as a 5pp macro miss. */
+export const ENERGY_WEIGHT = 100;
 
 export type RebalanceStatus =
   | "solved"
@@ -49,8 +64,8 @@ export type RebalanceStatus =
 export interface RebalanceResult {
   /** New items array with locked items scaled to preserve their % share, unlocked items adjusted. */
   items: RecipeItem[];
-  /** Achieved % after the solve, on DM basis. */
-  achieved: { proteinPct: number; fatPct: number; carbPct: number };
+  /** Achieved % after the solve, on DM basis. Includes kcal/g for energy density. */
+  achieved: { proteinPct: number; fatPct: number; carbPct: number; kcalPerG: number };
   /** Sum of squared % errors at the final solution. */
   residualError: number;
   /** Iterations used (for diagnostics). */
@@ -78,6 +93,15 @@ function lossOf(items: RecipeItem[], targets: MacroTargetsDM): number {
   if (targets.proteinPct !== null) loss += (m.proteinPct_DM - targets.proteinPct) ** 2;
   if (targets.fatPct !== null) loss += (m.fatPct_DM - targets.fatPct) ** 2;
   if (targets.carbPct !== null) loss += (m.carbPct_DM - targets.carbPct) ** 2;
+  if (targets.kcalPerG !== null && targets.kcalPerG !== undefined) {
+    const totalGrams = items.reduce((s, i) => s + i.grams, 0);
+    if (totalGrams > 0) {
+      const achieved = totals.energy_kcal / totalGrams;
+      const delta = achieved - targets.kcalPerG;
+      const overTol = Math.max(0, Math.abs(delta) - ENERGY_TOLERANCE);
+      loss += overTol * overTol * ENERGY_WEIGHT;
+    }
+  }
   return loss;
 }
 
@@ -117,6 +141,9 @@ export interface RebalanceOptions {
   minScale?: number;
   /** Outer iterations for lock-by-%: re-scale locked items, re-solve unlocked, repeat. Default 3. */
   lockPctPasses?: number;
+  /** Each unlocked ingredient's new grams must be >= max(this fraction of total, its starting %).
+   *  Default 0.02 (2%). Items already below 2% at the start are pinned at their starting %. */
+  floorPctOfRecipe?: number;
   /** Pet species/stage for AAFCO compliance check on result. Optional. */
   aafcoTarget?: { species: Species; isGrowth: boolean };
 }
@@ -214,11 +241,23 @@ export function solveRebalance(
   const maxScale = options.maxScale ?? 5;
   const minScale = options.minScale ?? 0.05;
   const lockPctPasses = options.lockPctPasses ?? 3;
+  const floorPctOfRecipe = options.floorPctOfRecipe ?? 0.02;
+
+  // Auto-lock any item that is ≤ floorPctOfRecipe of the original recipe.
+  // These are micro/supplement ingredients (eggshell, brewer's yeast, oils
+  // dosed in droplets) that should NEVER be touched by the solver.
+  const _autoLockOrigTotal = items.reduce((s, it) => s + it.grams, 0);
+  const effectiveLockedIds = new Set(lockedIds);
+  for (const it of items) {
+    if (effectiveLockedIds.has(it.ingredientId)) continue;
+    const pct = _autoLockOrigTotal > 0 ? it.grams / _autoLockOrigTotal : 0;
+    if (pct <= floorPctOfRecipe) effectiveLockedIds.add(it.ingredientId);
+  }
 
   const unlockedIdx: number[] = [];
   const lockedIdx: number[] = [];
   items.forEach((it, idx) => {
-    if (lockedIds.has(it.ingredientId)) lockedIdx.push(idx);
+    if (effectiveLockedIds.has(it.ingredientId)) lockedIdx.push(idx);
     else unlockedIdx.push(idx);
   });
 
@@ -227,7 +266,7 @@ export function solveRebalance(
     const m = recipeMacros(items, totals);
     return {
       items: items.map(i => ({ ...i })),
-      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM },
+      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM, kcalPerG: kcalPerG(items, totals) },
       residualError: lossOf(items, targets),
       iterations: 0,
       status: "all_locked",
@@ -249,7 +288,7 @@ export function solveRebalance(
     const m = recipeMacros(items, totals);
     return {
       items: items.map(i => ({ ...i })),
-      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM },
+      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM, kcalPerG: kcalPerG(items, totals) },
       residualError: lossOf(items, targets),
       iterations: 0,
       status: "no_unlocked_macro_source",
@@ -320,6 +359,7 @@ export function solveRebalance(
       proteinPct: finalMacros.proteinPct_DM,
       fatPct: finalMacros.fatPct_DM,
       carbPct: finalMacros.carbPct_DM,
+      kcalPerG: kcalPerG(work, finalTotals),
     },
     residualError: finalLoss,
     iterations: totalIter,
