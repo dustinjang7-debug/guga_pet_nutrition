@@ -86,24 +86,7 @@ export default function PremixComposer() {
     setHasNormalized(false);
     setDaysToShow(1);
   }, [pet.species, pet.bodyWeightKg, pet.lifeStageKey, pet.factor, pet.feedingMode, premixSku]);
-  // Track the fresh-ingredient signature (which items + their grams) so we
-  // reset normalize gate on add/remove/% edits but NOT on the premix-row
-  // sync effect (which only touches the premix row).
-  const freshSignature = useMemo(
-    () =>
-      items
-        .filter(i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number]))
-        .map(i => `${i.ingredientId}:${i.grams}`)
-        .sort()
-        .join("|"),
-    [items],
-  );
   const lastNormalizedSignature = useRef<string>("");
-  useEffect(() => {
-    if (freshSignature !== lastNormalizedSignature.current) {
-      setHasNormalized(false);
-    }
-  }, [freshSignature]);
 
   // Step 1 — sachets/day from body weight (whole-sachet snap, customer-facing dose).
   const dose = useMemo(() => computeSachetDose(pet.bodyWeightKg), [pet.bodyWeightKg]);
@@ -152,9 +135,28 @@ export default function PremixComposer() {
     setItems(loaded);
   }, [recipeQuery.data]);
 
-  // Live calcs (identical to Simple Composer)
-  const totals = useMemo(() => recipeTotals(items), [items]);
-  const macros = useMemo(() => recipeMacros(items, totals), [items, totals]);
+  // Live calcs (Premix Composer ONLY uses fresh ingredients for nutrition
+  // math). Premix is a locked output sized after fresh ingredients are
+  // decided — feeding it back into totals/macros/daily creates the
+  // bodyWeight → dose → premixGrams → setItems → macros → daily →
+  // premixGrams cycle that triggered React #185.
+  const freshItems = useMemo(
+    () => items.filter(i => !PREMIX_IDS.includes(i.ingredientId as typeof PREMIX_IDS[number])),
+    [items],
+  );
+  // Track fresh-ingredient signature so the normalize gate flips off on
+  // add/remove/% edits but NOT when the premix-row sync effect runs.
+  const freshSignature = useMemo(
+    () => freshItems.map(i => `${i.ingredientId}:${i.grams}`).sort().join("|"),
+    [freshItems],
+  );
+  useEffect(() => {
+    if (freshSignature !== lastNormalizedSignature.current) {
+      setHasNormalized(false);
+    }
+  }, [freshSignature]);
+  const totals = useMemo(() => recipeTotals(freshItems), [freshItems]);
+  const macros = useMemo(() => recipeMacros(freshItems, totals), [freshItems, totals]);
   const stage =
     pet.species === "dog"
       ? DOG_LIFE_STAGES[pet.lifeStageKey as keyof typeof DOG_LIFE_STAGES]
@@ -234,7 +236,9 @@ export default function PremixComposer() {
       if (
         existingPremix
         && existingPremix.ingredientId === premixSku
-        && Math.abs(existingPremix.grams - rounded) < 0.05
+        // Compare on integer tenths of a gram to avoid float-rounding
+        // oscillation that would re-fire this effect indefinitely.
+        && Math.round(existingPremix.grams * 10) === Math.round(rounded * 10)
       ) {
         // Same SKU, same rounded grams → no state change.
         return prev;

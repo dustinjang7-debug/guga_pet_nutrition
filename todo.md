@@ -320,3 +320,26 @@
 
 - [x] Reproduced in dev: NO error — confirmed reported error is from stale prod bundle (index-CUxLTXqE.js = v0.6.7)
 - [x] User must Publish + hard refresh to pick up v0.6.8–v0.6.10 fixes
+
+## v0.6.12 — Hotfix React #185 when adding ingredient after Normalize
+
+- [ ] Reproduce: load /premix/new, add 1 fresh ingredient, click Normalize, then add a 2nd ingredient → expect #185
+- [ ] Trace: likely the freshSignature watcher (added in v0.6.10) interacts badly with the premix-row sync effect when a NEW item is appended
+- [ ] Fix and verify in dev (no error after Normalize → add → add → remove)
+- [ ] Tests pass
+- [ ] Save checkpoint
+
+## v0.6.13 — Exclude premix from DM/macro/daily calc (architectural fix for #185)
+
+User directive: premix should NEVER feed back into totals/macros/daily/AAFCO computations on Premix Composer. It's a locked output sized after fresh ingredients are decided. This breaks the feedback loop at its root.
+
+- [ ] In PremixComposer, derive `freshItems = items.filter(i => !PREMIX_IDS.includes(...))`
+- [ ] Compute `totals`, `macros`, `daily`, `aafco` from `freshItems` (NOT items)
+- [ ] Keep `items` (full list incl. premix) only for: display in RecipeItemsList, save to DB, PDF export
+- [ ] Remove the freshSignature watcher (no longer needed once loop is broken)
+- [ ] Verify: cat 5kg + chicken breast → no #185
+- [ ] Verify: dog 10kg + zucchini + yogurt → no #185
+- [ ] Verify: weight changes 5→25 → no #185
+- [ ] Verify: SKU swap BASIC↔UPGRADE → no #185
+- [ ] Tests pass
+- [ ] Save checkpoint
