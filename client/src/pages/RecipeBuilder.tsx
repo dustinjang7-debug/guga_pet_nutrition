@@ -356,6 +356,8 @@ export default function RecipeBuilder() {
             open={rebalanceOpen}
             onOpenChange={setRebalanceOpen}
             items={items}
+            species={pet.species}
+            isGrowth={isGrowth}
             onApply={(newItems) => {
               setItems(newItems);
               toast.success(t("rebalance_apply", lang) + " ✓");

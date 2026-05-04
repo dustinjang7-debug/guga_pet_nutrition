@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLang, t, ingredientName, type Lang } from "@/lib/i18n";
-import { type RecipeItem, recipeTotals, recipeMacros } from "@shared/calc";
+import { type RecipeItem, recipeTotals, recipeMacros, aafcoComparison, caPhosphorusRatio } from "@shared/calc";
+import { type Species } from "@shared/aafco";
 import { INGREDIENT_BY_ID } from "@shared/ingredients";
 import {
   solveRebalance,
@@ -29,17 +30,29 @@ interface Props {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   items: RecipeItem[];
+  /** Pet species — needed for AAFCO check on result */
+  species: Species;
+  /** Whether to use growth/repro AAFCO profile */
+  isGrowth: boolean;
   /** Called when user clicks Apply. Parent overwrites its items state. */
   onApply: (newItems: RecipeItem[]) => void;
 }
 
-export function RebalanceSheet({ open, onOpenChange, items, onApply }: Props) {
+export function RebalanceSheet({ open, onOpenChange, items, species, isGrowth, onApply }: Props) {
   const [lang] = useLang();
   const baseline = useMemo(() => {
     const totals = recipeTotals(items);
     const m = recipeMacros(items, totals);
-    return { P: m.proteinPct_DM, F: m.fatPct_DM, C: m.carbPct_DM };
-  }, [items]);
+    const cap = caPhosphorusRatio(totals).ratio;
+    const aafcoRows = aafcoComparison(totals, m, species, isGrowth);
+    let met = 0, below = 0, over = 0;
+    for (const r of aafcoRows) {
+      if (r.status === "ok" || r.status === "borderline") met++;
+      else if (r.status === "below") below++;
+      else if (r.status === "above") over++;
+    }
+    return { P: m.proteinPct_DM, F: m.fatPct_DM, C: m.carbPct_DM, caP: cap, aafco: { met, below, over } };
+  }, [items, species, isGrowth]);
 
   // Targets default to current macros so user starts from where they are.
   // Reseed whenever the modal opens with a new baseline (different recipe).
@@ -78,7 +91,9 @@ export function RebalanceSheet({ open, onOpenChange, items, onApply }: Props) {
         fatPct: parseFloat(targetF),
         carbPct: parseFloat(targetC),
       };
-      const r = solveRebalance(items, lockedIds, targets);
+      const r = solveRebalance(items, lockedIds, targets, {
+        aafcoTarget: { species, isGrowth },
+      });
       setResult(r);
       setSolving(false);
     }, 16);
@@ -157,7 +172,7 @@ export function RebalanceSheet({ open, onOpenChange, items, onApply }: Props) {
           </Button>
 
           {/* Preview */}
-          {result && <ResultPreview result={result} lang={lang} items={items} />}
+          {result && <ResultPreview result={result} lang={lang} items={items} baseline={baseline} />}
         </div>
 
         <DialogFooter>
@@ -201,8 +216,13 @@ function TargetInput({
 }
 
 function ResultPreview({
-  result, lang, items,
-}: { result: RebalanceResult; lang: Lang; items: RecipeItem[] }) {
+  result, lang, items, baseline,
+}: {
+  result: RebalanceResult;
+  lang: Lang;
+  items: RecipeItem[];
+  baseline: { caP: number | null; aafco: { met: number; below: number; over: number } };
+}) {
   const beforeById = new Map(items.map(i => [i.ingredientId, i.grams]));
   const statusColor =
     result.status === "solved" ? "text-emerald-600 dark:text-emerald-400"
@@ -220,6 +240,19 @@ function ResultPreview({
         <AchievedCell label={t("target_protein", lang)} value={result.achieved.proteinPct} delta={result.delta.proteinPct} />
         <AchievedCell label={t("target_fat", lang)} value={result.achieved.fatPct} delta={result.delta.fatPct} />
         <AchievedCell label={t("target_carb", lang)} value={result.achieved.carbPct} delta={result.delta.carbPct} />
+      </div>
+
+      {/* Ca:P + AAFCO summary */}
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <CaPCell label={t("ca_p_ratio", lang)} value={result.caPRatio} before={baseline.caP} />
+        {result.aafco && (
+          <AafcoCell
+            label={t("aafco_compliance", lang)}
+            after={result.aafco}
+            before={baseline.aafco}
+            lang={lang}
+          />
+        )}
       </div>
       <div className="space-y-0.5 max-h-40 overflow-y-auto">
         {result.items.map(it => {
@@ -244,6 +277,53 @@ function ResultPreview({
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function CaPCell({ label, value, before }: { label: string; value: number | null; before: number | null }) {
+  const inGolden = value !== null && value >= 1.2 && value <= 1.4;
+  const inAafco = value !== null && value >= 1.0 && value <= 2.0;
+  const color = value === null ? "text-muted-foreground"
+    : inGolden ? "text-emerald-600 dark:text-emerald-400"
+    : inAafco ? "text-amber-600 dark:text-amber-400"
+    : "text-destructive";
+  return (
+    <div className="rounded bg-card p-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`font-mono text-base tabular-nums ${color}`}>
+        {value === null ? "—" : `${value.toFixed(2)} : 1`}
+      </div>
+      {before !== null && (
+        <div className="text-[10px] tabular-nums text-muted-foreground">
+          was {before.toFixed(2)} : 1
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AafcoCell({
+  label, after, before, lang,
+}: {
+  label: string;
+  after: { met: number; below: number; over: number };
+  before: { met: number; below: number; over: number };
+  lang: Lang;
+}) {
+  const regressed = after.below > before.below;
+  return (
+    <div className="rounded bg-card p-2">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="flex items-baseline gap-1 font-mono text-base tabular-nums">
+        <span className="text-emerald-600 dark:text-emerald-400">{after.met}</span>
+        <span className="text-muted-foreground">/</span>
+        <span className={after.below > 0 ? "text-destructive" : "text-muted-foreground"}>{after.below}</span>
+        <span className="text-[10px] text-muted-foreground ml-1">{t("aafco_met_below", lang)}</span>
+      </div>
+      <div className={`text-[10px] tabular-nums ${regressed ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+        was {before.met} / {before.below}{regressed ? " ⚠" : ""}
       </div>
     </div>
   );

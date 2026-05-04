@@ -179,6 +179,9 @@ const DICT = {
     rebalance_status_all_locked: "All Locked",
     rebalance_status_no_unlocked_macro_source: "Missing Macro Source",
     target_fat: "Fat",
+    ca_p_ratio: "Ca:P Ratio",
+    aafco_compliance: "AAFCO Compliance",
+    aafco_met_below: "Met / Below",
   },
   zh: {
     appName: "GUGA 营养",
@@ -340,6 +343,9 @@ const DICT = {
     rebalance_status_all_locked: "全部锁定",
     rebalance_status_no_unlocked_macro_source: "缺少宏量素来源",
     target_fat: "脂肪",
+    ca_p_ratio: "钙磷比",
+    aafco_compliance: "AAFCO 达标",
+    aafco_met_below: "达标 / 未达标",
   },
   th: {
     appName: "GUGA Nutrition",
@@ -501,6 +507,9 @@ const DICT = {
     rebalance_status_all_locked: "ล็อคทั้งหมด",
     rebalance_status_no_unlocked_macro_source: "ขาดแหล่งมาโคร",
     target_fat: "ไขมัน",
+    ca_p_ratio: "อัตราส่วน Ca:P",
+    aafco_compliance: "การปฏิบัติตาม AAFCO",
+    aafco_met_below: "ผ่าน / ต่ำกว่า",
   },
 } as const;
 

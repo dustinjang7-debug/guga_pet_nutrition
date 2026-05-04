@@ -30,7 +30,8 @@
  */
 
 import { INGREDIENT_BY_ID } from "./ingredients";
-import { type RecipeItem, recipeTotals, recipeMacros } from "./calc";
+import { type RecipeItem, recipeTotals, recipeMacros, aafcoComparison, caPhosphorusRatio } from "./calc";
+import { type Species } from "./aafco";
 
 export interface MacroTargetsDM {
   proteinPct: number | null;
@@ -46,7 +47,7 @@ export type RebalanceStatus =
   | "no_unlocked_macro_source";
 
 export interface RebalanceResult {
-  /** New items array with unlocked grams adjusted; locked grams unchanged. */
+  /** New items array with locked items scaled to preserve their % share, unlocked items adjusted. */
   items: RecipeItem[];
   /** Achieved % after the solve, on DM basis. */
   achieved: { proteinPct: number; fatPct: number; carbPct: number };
@@ -61,6 +62,10 @@ export interface RebalanceResult {
     fatPct: number | null;
     carbPct: number | null;
   };
+  /** Ca:P ratio of the new recipe (or null if no Ca / P). */
+  caPRatio: number | null;
+  /** Optional AAFCO compliance summary against species/stage if provided. */
+  aafco?: { met: number; below: number; over: number };
 }
 
 /**
@@ -110,6 +115,10 @@ export interface RebalanceOptions {
   /** Floor each unlocked ingredient at this multiple of its original grams.
    *  Default 0.05 — ingredients can shrink to 5% of original but not vanish. */
   minScale?: number;
+  /** Outer iterations for lock-by-%: re-scale locked items, re-solve unlocked, repeat. Default 3. */
+  lockPctPasses?: number;
+  /** Pet species/stage for AAFCO compliance check on result. Optional. */
+  aafcoTarget?: { species: Species; isGrowth: boolean };
 }
 
 /**
@@ -120,75 +129,35 @@ export interface RebalanceOptions {
  * and shrink the step size as we converge. This is robust for the small
  * problem sizes we have (typically 3-10 unlocked items).
  */
-export function solveRebalance(
+/**
+ * Inner core: bounded coordinate descent on unlocked items only.
+ * Locked items keep their grams during this pass (we'll re-scale them
+ * outside, in the lock-by-% wrapper).
+ */
+function solveCore(
   items: RecipeItem[],
-  lockedIds: Set<number>,
+  unlockedIdx: number[],
   targets: MacroTargetsDM,
-  options: RebalanceOptions = {},
-): RebalanceResult {
-  const maxIterations = options.maxIterations ?? 200;
-  const errorThreshold = options.errorThreshold ?? 1.0;
-  const maxScale = options.maxScale ?? 5;
-  const minScale = options.minScale ?? 0.05;
-
-  const unlockedIdx: number[] = [];
-  items.forEach((it, idx) => {
-    if (!lockedIds.has(it.ingredientId)) unlockedIdx.push(idx);
-  });
-
-  if (unlockedIdx.length === 0) {
-    const totals = recipeTotals(items);
-    const m = recipeMacros(items, totals);
-    return {
-      items: items.map(i => ({ ...i })),
-      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM },
-      residualError: lossOf(items, targets),
-      iterations: 0,
-      status: "all_locked",
-      delta: deltaOf(m, targets),
-    };
-  }
-
-  const roles = inventoryUnlockedRoles(items, unlockedIdx);
-  const cantHitProtein = targets.proteinPct !== null && targets.proteinPct > 0 && !roles.hasProtein;
-  const cantHitFat = targets.fatPct !== null && targets.fatPct > 0 && !roles.hasFat;
-  const cantHitCarb = targets.carbPct !== null && targets.carbPct > 0 && !roles.hasCarb;
-  const allRolesMissing = cantHitProtein && cantHitFat && cantHitCarb;
-  if (allRolesMissing) {
-    const totals = recipeTotals(items);
-    const m = recipeMacros(items, totals);
-    return {
-      items: items.map(i => ({ ...i })),
-      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM },
-      residualError: lossOf(items, targets),
-      iterations: 0,
-      status: "no_unlocked_macro_source",
-      delta: deltaOf(m, targets),
-    };
-  }
-
-  // Working copy (deep-copied so we never mutate caller's items).
+  opts: { maxIterations: number; errorThreshold: number; maxScale: number; minScale: number },
+): { work: RecipeItem[]; iterations: number } {
   const work = items.map(i => ({ ...i }));
   const originalGrams: Record<number, number> = {};
   for (const i of unlockedIdx) originalGrams[i] = work[i].grams;
 
   let bestLoss = lossOf(work, targets);
-
-  // Initial step size: 25% of original grams. Halve when no improvement.
   let stepFrac = 0.25;
-  const stepFloor = 0.005; // 0.5% — finer than this is noise
+  const stepFloor = 0.005;
   let iter = 0;
 
-  while (iter < maxIterations && bestLoss > errorThreshold) {
+  while (iter < opts.maxIterations && bestLoss > opts.errorThreshold) {
     let improved = false;
     for (const i of unlockedIdx) {
       const orig = originalGrams[i];
-      const minG = orig * minScale;
-      const maxG = orig * maxScale;
+      const minG = orig * opts.minScale;
+      const maxG = orig * opts.maxScale;
       const cur = work[i].grams;
       const step = Math.max(orig * stepFrac, 0.1);
 
-      // Try up
       const up = Math.min(maxG, cur + step);
       if (up !== cur) {
         work[i].grams = up;
@@ -201,7 +170,6 @@ export function solveRebalance(
         work[i].grams = cur;
       }
 
-      // Try down
       const down = Math.max(minG, cur - step);
       if (down !== cur) {
         work[i].grams = down;
@@ -220,27 +188,133 @@ export function solveRebalance(
       if (stepFrac < stepFloor) break;
     }
   }
+  return { work, iterations: iter };
+}
 
-  // Round to 0.1 g for display sanity. We re-evaluate loss on the rounded
-  // values so the reported achieved % matches what the UI will show.
-  for (const i of unlockedIdx) {
+/**
+ * Solve for new grams on unlocked ingredients to match target P/F/C %.
+ *
+ * **Lock-by-% semantics**: locked ingredients preserve their share of total
+ * recipe weight (not their absolute grams). When the solver expands or shrinks
+ * the unlocked group, locked items scale proportionally so their % stays
+ * constant.
+ *
+ * Algorithm: outer loop alternates (a) solve unlocked grams against targets,
+ * (b) re-scale locked items so each preserves its original % of new total.
+ * Converges in 2-3 outer passes for typical recipes.
+ */
+export function solveRebalance(
+  items: RecipeItem[],
+  lockedIds: Set<number>,
+  targets: MacroTargetsDM,
+  options: RebalanceOptions = {},
+): RebalanceResult {
+  const maxIterations = options.maxIterations ?? 200;
+  const errorThreshold = options.errorThreshold ?? 1.0;
+  const maxScale = options.maxScale ?? 5;
+  const minScale = options.minScale ?? 0.05;
+  const lockPctPasses = options.lockPctPasses ?? 3;
+
+  const unlockedIdx: number[] = [];
+  const lockedIdx: number[] = [];
+  items.forEach((it, idx) => {
+    if (lockedIds.has(it.ingredientId)) lockedIdx.push(idx);
+    else unlockedIdx.push(idx);
+  });
+
+  if (unlockedIdx.length === 0) {
+    const totals = recipeTotals(items);
+    const m = recipeMacros(items, totals);
+    return {
+      items: items.map(i => ({ ...i })),
+      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM },
+      residualError: lossOf(items, targets),
+      iterations: 0,
+      status: "all_locked",
+      delta: deltaOf(m, targets),
+      caPRatio: caPhosphorusRatio(totals).ratio,
+      ...(options.aafcoTarget
+        ? { aafco: aafcoSummary(items, options.aafcoTarget.species, options.aafcoTarget.isGrowth) }
+        : {}),
+    };
+  }
+
+  const roles = inventoryUnlockedRoles(items, unlockedIdx);
+  const cantHitProtein = targets.proteinPct !== null && targets.proteinPct > 0 && !roles.hasProtein;
+  const cantHitFat = targets.fatPct !== null && targets.fatPct > 0 && !roles.hasFat;
+  const cantHitCarb = targets.carbPct !== null && targets.carbPct > 0 && !roles.hasCarb;
+  const allRolesMissing = cantHitProtein && cantHitFat && cantHitCarb;
+  if (allRolesMissing) {
+    const totals = recipeTotals(items);
+    const m = recipeMacros(items, totals);
+    return {
+      items: items.map(i => ({ ...i })),
+      achieved: { proteinPct: m.proteinPct_DM, fatPct: m.fatPct_DM, carbPct: m.carbPct_DM },
+      residualError: lossOf(items, targets),
+      iterations: 0,
+      status: "no_unlocked_macro_source",
+      delta: deltaOf(m, targets),
+      caPRatio: caPhosphorusRatio(totals).ratio,
+      ...(options.aafcoTarget
+        ? { aafco: aafcoSummary(items, options.aafcoTarget.species, options.aafcoTarget.isGrowth) }
+        : {}),
+    };
+  }
+
+  // Capture each locked item's original % share of the recipe.
+  const origTotal = items.reduce((s, it) => s + it.grams, 0);
+  const lockedShares: Record<number, number> = {};
+  for (const i of lockedIdx) {
+    lockedShares[i] = origTotal > 0 ? items[i].grams / origTotal : 0;
+  }
+
+  let work = items.map(i => ({ ...i }));
+  let totalIter = 0;
+  const coreOpts = { maxIterations, errorThreshold, maxScale, minScale };
+
+  for (let pass = 0; pass < lockPctPasses; pass++) {
+    // Solve unlocked grams against targets, holding current locked grams fixed.
+    const result = solveCore(work, unlockedIdx, targets, coreOpts);
+    work = result.work;
+    totalIter += result.iterations;
+
+    if (lockedIdx.length === 0) break;
+
+    // Re-scale locked items so each preserves its original % of new total.
+    // We iterate on this because changing locked grams changes total which
+    // changes the target grams for next pass.
+    let prevLockedTotal = -1;
+    for (let inner = 0; inner < 8; inner++) {
+      const unlockedTotal = unlockedIdx.reduce((s, i) => s + work[i].grams, 0);
+      const lockedShareSum = lockedIdx.reduce((s, i) => s + lockedShares[i], 0);
+      // newTotal * (1 - lockedShareSum) = unlockedTotal
+      if (1 - lockedShareSum < 1e-6) break; // degenerate (all locked is 100%)
+      const newTotal = unlockedTotal / (1 - lockedShareSum);
+      let newLockedTotal = 0;
+      for (const i of lockedIdx) {
+        work[i].grams = lockedShares[i] * newTotal;
+        newLockedTotal += work[i].grams;
+      }
+      if (Math.abs(newLockedTotal - prevLockedTotal) < 0.05) break;
+      prevLockedTotal = newLockedTotal;
+    }
+  }
+
+  // Round all to 0.1 g for display sanity.
+  for (let i = 0; i < work.length; i++) {
     work[i].grams = Math.round(work[i].grams * 10) / 10;
   }
   const finalTotals = recipeTotals(work);
   const finalMacros = recipeMacros(work, finalTotals);
   const finalLoss = lossOf(work, targets);
 
-  // Status thresholds (squared % error across the up-to-3 active targets):
-  //   solved   : loss <= 3   ≈ ~1pp per macro on average
-  //   partial  : loss <= 27  ≈ ~3pp per macro average
-  //   infeasible : worse than that
   let status: RebalanceStatus;
   if (finalLoss <= 3) status = "solved";
   else if (cantHitProtein || cantHitFat || cantHitCarb) status = "partial";
   else if (finalLoss <= 27) status = "partial";
   else status = "infeasible";
 
-  return {
+  const result: RebalanceResult = {
     items: work,
     achieved: {
       proteinPct: finalMacros.proteinPct_DM,
@@ -248,10 +322,32 @@ export function solveRebalance(
       carbPct: finalMacros.carbPct_DM,
     },
     residualError: finalLoss,
-    iterations: iter,
+    iterations: totalIter,
     status,
     delta: deltaOf(finalMacros, targets),
+    caPRatio: caPhosphorusRatio(finalTotals).ratio,
   };
+  if (options.aafcoTarget) {
+    result.aafco = aafcoSummary(work, options.aafcoTarget.species, options.aafcoTarget.isGrowth);
+  }
+  return result;
+}
+
+function aafcoSummary(
+  items: RecipeItem[],
+  species: Species,
+  isGrowth: boolean,
+): { met: number; below: number; over: number } {
+  const totals = recipeTotals(items);
+  const macros = recipeMacros(items, totals);
+  const rows = aafcoComparison(totals, macros, species, isGrowth);
+  let met = 0, below = 0, over = 0;
+  for (const r of rows) {
+    if (r.status === "ok" || r.status === "borderline") met++;
+    else if (r.status === "below") below++;
+    else if (r.status === "above") over++;
+  }
+  return { met, below, over };
 }
 
 function deltaOf(

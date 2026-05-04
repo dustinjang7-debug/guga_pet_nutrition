@@ -374,3 +374,12 @@
 - [ ] Block from Premix Composer entry points
 - [ ] Tests pass
 - [ ] Save checkpoint
+
+## v0.7.1 — Macro Rebalance: lock-by-% + AAFCO check
+
+- [ ] Solver: locked items keep their % of recipe (auto-scale grams when total batch weight changes)
+- [ ] Result panel adds: Ca:P ratio (with delta) + AAFCO Met/Below count + warning if AAFCO regresses
+- [ ] EN/ZH/TH labels for new fields
+- [ ] Update solver tests for % locks
+- [ ] Verify in dev with 1 lock and 2 locks
+- [ ] Save checkpoint

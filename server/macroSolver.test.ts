@@ -30,18 +30,68 @@ describe("solveRebalance", () => {
     for (const it of r.items) expect(it.grams).toBeGreaterThan(0);
   });
 
-  it("respects locked ingredients (their grams are unchanged)", () => {
+  it("locks ingredients by % share of recipe (grams scale with new total)", () => {
     const items = [
       { ingredientId: CHICKEN_BREAST_ID, grams: 200 },
       { ingredientId: SALMON_ID, grams: 50 },
       { ingredientId: SWEET_POTATO_ID, grams: 100 },
     ];
+    const origTotal = 350;
+    const sweetOrigShare = 100 / origTotal; // ~28.57%
     const locked = new Set([SWEET_POTATO_ID]);
     const targets = { proteinPct: 50, fatPct: 30, carbPct: 15 };
     const r = solveRebalance(items, locked, targets);
-    const sweet = r.items.find(i => i.ingredientId === SWEET_POTATO_ID);
-    expect(sweet).toBeDefined();
-    expect(sweet!.grams).toBe(100); // unchanged
+    const sweet = r.items.find(i => i.ingredientId === SWEET_POTATO_ID)!;
+    const newTotal = r.items.reduce((s, i) => s + i.grams, 0);
+    const newShare = sweet.grams / newTotal;
+    // Allow 1pp tolerance for rounding to 0.1g
+    expect(Math.abs(newShare - sweetOrigShare)).toBeLessThan(0.01);
+  });
+
+  it("preserves multiple locked items' % shares simultaneously", () => {
+    const items = [
+      { ingredientId: CHICKEN_BREAST_ID, grams: 200 },
+      { ingredientId: SALMON_ID, grams: 50 },
+      { ingredientId: SWEET_POTATO_ID, grams: 100 },
+      { ingredientId: OAT_ID, grams: 30 },
+      { ingredientId: SALMON_OIL_ID, grams: 5 },
+    ];
+    const origTotal = items.reduce((s, i) => s + i.grams, 0);
+    const sweetShare = 100 / origTotal;
+    const oatShare = 30 / origTotal;
+    const locked = new Set([SWEET_POTATO_ID, OAT_ID]);
+    const r = solveRebalance(items, locked, { proteinPct: 45, fatPct: 25, carbPct: 25 });
+    const newTotal = r.items.reduce((s, i) => s + i.grams, 0);
+    const sweet = r.items.find(i => i.ingredientId === SWEET_POTATO_ID)!;
+    const oat = r.items.find(i => i.ingredientId === OAT_ID)!;
+    expect(Math.abs(sweet.grams / newTotal - sweetShare)).toBeLessThan(0.01);
+    expect(Math.abs(oat.grams / newTotal - oatShare)).toBeLessThan(0.01);
+  });
+
+  it("returns Ca:P ratio in the result", () => {
+    const items = [
+      { ingredientId: CHICKEN_BREAST_ID, grams: 200 },
+      { ingredientId: SWEET_POTATO_ID, grams: 100 },
+    ];
+    const r = solveRebalance(items, new Set(), { proteinPct: 40, fatPct: 30, carbPct: 30 });
+    expect(r.caPRatio).not.toBeNull();
+    expect(typeof r.caPRatio).toBe("number");
+  });
+
+  it("returns AAFCO summary when aafcoTarget option provided", () => {
+    const items = [
+      { ingredientId: CHICKEN_BREAST_ID, grams: 200 },
+      { ingredientId: SWEET_POTATO_ID, grams: 100 },
+      { ingredientId: SALMON_OIL_ID, grams: 5 },
+    ];
+    const r = solveRebalance(
+      items,
+      new Set(),
+      { proteinPct: 40, fatPct: 30, carbPct: 30 },
+      { aafcoTarget: { species: "dog", isGrowth: false } },
+    );
+    expect(r.aafco).toBeDefined();
+    expect(r.aafco!.met + r.aafco!.below + r.aafco!.over).toBeGreaterThan(0);
   });
 
   it("returns all_locked when every ingredient is locked", () => {
