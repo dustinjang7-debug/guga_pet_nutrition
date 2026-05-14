@@ -4,7 +4,7 @@
  */
 
 import { History, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ingredientName } from "@/lib/i18n";
 import { useLang } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
@@ -90,7 +90,22 @@ function DiffSummary({ diff, lang }: { diff: RecipeDiff; lang: "en" | "zh" | "th
 export function HistoryPanel({ recipeId }: Props) {
   const [lang] = useLang();
   const [open, setOpen] = useState(false);
-  const historyQuery = trpc.recipes.history.useQuery({ id: recipeId }, { enabled: open });
+  const utils = trpc.useUtils();
+  // The server marks the recipe as seen on every history fetch. Once the
+  // panel finishes loading, invalidate the home list so the unread badge
+  // disappears without requiring a manual refresh.
+  const historyQuery = trpc.recipes.history.useQuery(
+    { id: recipeId },
+    {
+      enabled: open,
+    },
+  );
+  const isSuccess = historyQuery.isSuccess;
+  useEffect(() => {
+    if (open && isSuccess) {
+      utils.recipes.list.invalidate();
+    }
+  }, [open, isSuccess, utils]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>

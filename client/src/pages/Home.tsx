@@ -189,6 +189,15 @@ function RecipesList({ onNew }: { onNew: () => void }) {
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <h3 className="font-display text-lg font-semibold leading-tight line-clamp-2">{r.name}</h3>
                   <div className="flex items-center gap-1 shrink-0">
+                    {r.unseenActivityCount > 0 && (
+                      <span
+                        title={t("unseen_activity_tooltip", lang)}
+                        className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-rose-500 text-white inline-flex items-center gap-1"
+                        data-testid={`badge-unseen-${r.id}`}
+                      >
+                        {r.unseenActivityCount > 9 ? "9+" : r.unseenActivityCount} {t("unseen_activity_label", lang)}
+                      </span>
+                    )}
                     {r.role !== "owner" && (
                       <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 inline-flex items-center gap-1">
                         <Users className="size-2.5" />

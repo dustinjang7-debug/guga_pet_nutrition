@@ -1,5 +1,5 @@
 import type { ExtractTablesWithRelations } from "drizzle-orm";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import type { NodePgDatabase, NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
 import type { PgTransaction } from "drizzle-orm/pg-core";
@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import {
   InsertUser,
   recipeActivity,
+  recipeActivitySeen,
   recipeCollaborators,
   recipeShareLinks,
   recipes,
@@ -141,9 +142,15 @@ export async function getUserById(id: number) {
 // ----------------------------------------------------------------------------
 
 /**
- * List recipes the user can see — owned plus shared (any role).
+ * List recipes the user can see — owned plus shared (any role). Each row is
+ * tagged with the viewer's role and the count of activity entries by *other*
+ * users that the viewer hasn't seen yet (drives the unread badge on /home).
  */
-export async function listRecipesByUser(userId: number): Promise<Array<Recipe & { role: "owner" | "editor" | "viewer" }>> {
+export async function listRecipesByUser(
+  userId: number,
+): Promise<
+  Array<Recipe & { role: "owner" | "editor" | "viewer"; unseenActivityCount: number }>
+> {
   const db = await getDb();
   if (!db) return [];
   const owned = await db
@@ -166,7 +173,9 @@ export async function listRecipesByUser(userId: number): Promise<Array<Recipe & 
     return true;
   });
   merged.sort((a, b) => (b.updatedAt?.getTime?.() ?? 0) - (a.updatedAt?.getTime?.() ?? 0));
-  return merged;
+  const ids = merged.map((r) => r.id);
+  const unseen = await getUnseenActivityCounts(userId, ids);
+  return merged.map((r) => ({ ...r, unseenActivityCount: unseen.get(r.id) ?? 0 }));
 }
 
 export async function getRecipeRowById(id: number, executor?: Executor): Promise<Recipe | undefined> {
@@ -225,6 +234,7 @@ export async function deleteRecipeById(id: number, executor?: Executor) {
   await ex.delete(recipeCollaborators).where(eq(recipeCollaborators.recipeId, id));
   await ex.delete(recipeShareLinks).where(eq(recipeShareLinks.recipeId, id));
   await ex.delete(recipeActivity).where(eq(recipeActivity.recipeId, id));
+  await ex.delete(recipeActivitySeen).where(eq(recipeActivitySeen.recipeId, id));
   await ex.delete(recipes).where(eq(recipes.id, id));
 }
 
@@ -249,6 +259,75 @@ export async function appendActivity(
     action: entry.action,
     payload: (entry.payload ?? null) as RecipeActivity["payload"],
   });
+}
+
+/**
+ * For each recipe in `recipeIds`, count activity entries authored by someone
+ * other than `userId` that occurred after the user's `lastSeenAt` pointer.
+ * A recipe with no pointer row is treated as "never seen" — i.e. all
+ * other-user activity counts. The user's own actions never contribute.
+ *
+ * Returns a map keyed by recipeId; recipes with zero unseen activity are
+ * omitted so callers can default to 0.
+ */
+export async function getUnseenActivityCounts(
+  userId: number,
+  recipeIds: number[],
+): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  if (recipeIds.length === 0) return out;
+  const db = await getDb();
+  if (!db) return out;
+  // Left-join the per-user pointer so recipes with no pointer still count.
+  const rows = await db
+    .select({
+      recipeId: recipeActivity.recipeId,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(recipeActivity)
+    .leftJoin(
+      recipeActivitySeen,
+      and(
+        eq(recipeActivitySeen.recipeId, recipeActivity.recipeId),
+        eq(recipeActivitySeen.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        inArray(recipeActivity.recipeId, recipeIds),
+        ne(recipeActivity.actorUserId, userId),
+        // createdAt > lastSeenAt; when lastSeenAt is NULL the comparison is
+        // unknown, so coalesce to epoch so all entries qualify.
+        gt(
+          recipeActivity.createdAt,
+          sql`coalesce(${recipeActivitySeen.lastSeenAt}, 'epoch'::timestamptz)`,
+        ),
+      ),
+    )
+    .groupBy(recipeActivity.recipeId);
+  for (const r of rows) out.set(r.recipeId, Number(r.count));
+  return out;
+}
+
+/**
+ * Upsert the user's "last seen" pointer for a recipe to `at` (defaults to
+ * now). Used when the user opens the recipe builder or the History panel.
+ */
+export async function markRecipeActivitySeen(
+  userId: number,
+  recipeId: number,
+  at: Date = new Date(),
+  executor?: Executor,
+): Promise<void> {
+  const ex = executor ?? (await getDb());
+  if (!ex) return;
+  await ex
+    .insert(recipeActivitySeen)
+    .values({ userId, recipeId, lastSeenAt: at })
+    .onConflictDoUpdate({
+      target: [recipeActivitySeen.userId, recipeActivitySeen.recipeId],
+      set: { lastSeenAt: at },
+    });
 }
 
 export async function listActivityForRecipe(recipeId: number) {

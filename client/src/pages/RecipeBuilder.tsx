@@ -176,6 +176,21 @@ export default function RecipeBuilder() {
       }
     },
   });
+  // Clear the unread-activity badge as soon as the recipe loads. Fire and
+  // forget — failure (e.g. transient network) just leaves the badge until
+  // the next visit, which is acceptable.
+  const markSeenMut = trpc.recipes.markSeen.useMutation({
+    onSuccess: () => utils.recipes.list.invalidate(),
+  });
+  const markedSeenForRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isEditing || !recipeQuery.data || markedSeenForRef.current === recipeId) return;
+    markedSeenForRef.current = recipeId!;
+    markSeenMut.mutate({ id: recipeId! });
+    // markSeenMut is stable across renders for our purposes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, recipeId, recipeQuery.data]);
+
   const duplicateMut = trpc.recipes.duplicate.useMutation({
     onSuccess: (data) => {
       utils.recipes.list.invalidate();

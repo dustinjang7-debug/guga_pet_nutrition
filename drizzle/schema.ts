@@ -149,3 +149,31 @@ export const recipeActivity = pgTable("recipe_activity", {
 });
 
 export type RecipeActivity = typeof recipeActivity.$inferSelect;
+
+/**
+ * Per-user "I've seen activity up to here" pointer for a recipe. Powers the
+ * unread-activity badge on /home and is updated whenever the user opens the
+ * recipe builder or the History panel for a recipe.
+ *
+ * Uniqueness is enforced by a `(userId, recipeId)` unique index — at most
+ * one pointer per pair, which is what `markRecipeActivitySeen`'s upsert
+ * relies on. Stored as a timestamp instead of an activity id so we don't
+ * need a foreign key on an append-only log; comparing against
+ * `recipe_activity.createdAt` is cheap and resilient to log pruning.
+ */
+export const recipeActivitySeen = pgTable(
+  "recipe_activity_seen",
+  {
+    userId: integer("userId").notNull(),
+    recipeId: integer("recipeId").notNull(),
+    lastSeenAt: timestamp("lastSeenAt", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    userRecipeUnique: uniqueIndex("recipe_activity_seen_user_recipe_unique").on(
+      t.userId,
+      t.recipeId,
+    ),
+  }),
+);
+
+export type RecipeActivitySeen = typeof recipeActivitySeen.$inferSelect;

@@ -19,6 +19,7 @@ import {
   listActivityForRecipe,
   listCollaborators,
   listRecipesByUser,
+  markRecipeActivitySeen,
   removeCollaborator,
   updateRecipeById,
   updateRecipeIfUnchanged,
@@ -332,7 +333,26 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
         await readRecipeWithRole(input.id, ctx.user.id);
-        return listActivityForRecipe(input.id);
+        const entries = await listActivityForRecipe(input.id);
+        // Opening the History panel counts as "seen" — any unseen badge
+        // for this recipe should disappear immediately on the next list
+        // refresh. Done after the read so we don't race the query result.
+        await markRecipeActivitySeen(ctx.user.id, input.id);
+        return entries;
+      }),
+
+    /**
+     * Update the user's "last seen" pointer for a recipe so the unread
+     * badge on /home clears. Called when the recipe builder opens.
+     */
+    markSeen: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        // readRecipeWithRole enforces that the caller actually has access
+        // to the recipe; otherwise anyone could seed pointer rows.
+        await readRecipeWithRole(input.id, ctx.user.id);
+        await markRecipeActivitySeen(ctx.user.id, input.id);
+        return { success: true } as const;
       }),
 
     /**
