@@ -5,7 +5,31 @@ import type { TrpcContext } from "./context";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
+  /**
+   * Forward the structured `cause` we attach to TRPCError instances so
+   * the client can read it off `err.shape.data.cause`. Used by the recipe
+   * conflict dialog to display "edited by X at <timestamp>".
+   */
+  errorFormatter({ shape, error }) {
+    const cause = error.cause;
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        cause: isPlainCause(cause) ? cause : undefined,
+      },
+    };
+  },
 });
+
+function isPlainCause(cause: unknown): cause is Record<string, unknown> {
+  return (
+    cause !== null &&
+    typeof cause === "object" &&
+    !(cause instanceof Error) &&
+    Object.getPrototypeOf(cause) === Object.prototype
+  );
+}
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

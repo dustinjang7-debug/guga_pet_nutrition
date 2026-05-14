@@ -37,6 +37,13 @@ Env vars (all optional for local boot — DB and auth are lazy):
 - `drizzle/schema.ts` — DB schema (source of truth)
 - `vite.config.ts` — Vite config (allows all hosts for Replit proxy)
 
+## Sharing, Import, History
+- **Share-by-link**: owner opens the share dialog and rotates a token; visiting `/r/<token>` while signed in calls `share.join` and adds the visitor as a `viewer`. Owner can promote viewer ⇄ editor or remove. Disabling clears `isActive`.
+- **Roles**: `owner` (full), `editor` (write but no sharing/delete), `viewer` (read-only — UI disables save/picker mutations). `recipes.list` returns role-tagged owned + shared rows.
+- **Concurrency**: `recipes.update` accepts `expectedUpdatedAt`; mismatch ⇒ TRPC `CONFLICT` with `cause: { kind, lastUpdatedAt, lastUpdatedByName }`. Surfaced via `errorFormatter` in `server/_core/trpc.ts`. Client conflict dialog offers Overwrite / Save as duplicate / Cancel.
+- **Portable file**: `.guga.json` (`shared/recipeFile.ts`, version 1). Exported PDFs append `\n%%GUGA_RECIPE_v1:<base64>\n` after `%%EOF` so the same file is also self-importing. Import always creates a draft; unknown ingredient IDs are dropped and reported.
+- **Activity log**: `recipe_activity` table; `recipes.history` returns entries with structured `diff` payloads (added/removed/changed ingredients + scalar field changes) for `edited`/`status_changed` actions.
+
 ## Architecture decisions
 - Single-port dev: Express mounts Vite as middleware on port 5000
 - DB is lazily connected; app boots without `DATABASE_URL`

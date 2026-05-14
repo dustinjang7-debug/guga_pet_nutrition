@@ -7,8 +7,9 @@ import { ingredientName, t, useLang } from "@/lib/i18n";
 import { trpc } from "@/lib/trpc";
 import type { Ingredient } from "@shared/ingredients";
 import { INGREDIENTS } from "@shared/ingredients";
-import { ArrowRight, FilePen, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, FilePen, Loader2, Sparkles, Trash2, Users } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { ImportRecipeButton } from "@/components/ImportRecipeButton";
 
 export default function Home() {
   const [lang] = useLang();
@@ -151,6 +152,7 @@ function RecipesList({ onNew }: { onNew: () => void }) {
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <ImportRecipeButton size="lg" variant="outline" />
           <Button onClick={() => (window.location.href = "/wizard/new")} size="lg" variant="default">
             <Sparkles className="size-4 mr-1.5" />
             {t("workflow_wizard", lang)}
@@ -186,9 +188,17 @@ function RecipesList({ onNew }: { onNew: () => void }) {
               <Link href={`/recipe/${r.id}`} className="flex-1 cursor-pointer">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <h3 className="font-display text-lg font-semibold leading-tight line-clamp-2">{r.name}</h3>
-                  <span className={`shrink-0 text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full ${r.status === "approved" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                    {r.status === "approved" ? t("status_approved", lang) : t("status_draft", lang)}
-                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {r.role !== "owner" && (
+                      <span className="text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 inline-flex items-center gap-1">
+                        <Users className="size-2.5" />
+                        {r.role}
+                      </span>
+                    )}
+                    <span className={`text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full ${r.status === "approved" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      {r.status === "approved" ? t("status_approved", lang) : t("status_draft", lang)}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-sm text-muted-foreground space-y-0.5">
                   <div>
@@ -201,17 +211,19 @@ function RecipesList({ onNew }: { onNew: () => void }) {
                 </div>
               </Link>
               <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (confirm(t("confirm_delete", lang))) del.mutate({ id: r.id });
-                  }}
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" />
-                </Button>
+                {r.role === "owner" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      if (confirm(t("confirm_delete", lang))) del.mutate({ id: r.id });
+                    }}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                )}
               </div>
             </Card>
           ))}

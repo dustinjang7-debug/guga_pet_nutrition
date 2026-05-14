@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import RecipeBuilder from "./pages/RecipeBuilder";
 import WizardPage from "./pages/WizardPage";
 import PremixComposer from "./pages/PremixComposer";
+import SharePage from "./pages/SharePage";
 
 function Router() {
   return (
@@ -19,6 +20,7 @@ function Router() {
       <Route path={"/wizard/:id"} component={WizardPage} />
       <Route path={"/premix/new"} component={PremixComposer} />
       <Route path={"/premix/:id"} component={PremixComposer} />
+      <Route path={"/r/:token"} component={SharePage} />
       <Route path={"/404"} component={NotFound} />
       <Route component={NotFound} />
     </Switch>

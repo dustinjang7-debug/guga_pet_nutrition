@@ -34,7 +34,7 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import { Save, Loader2, AlertTriangle, Package } from "lucide-react";
 
-import { ExportPdfButton } from "@/components/ExportPdfButton";
+import { ExportRecipeButton as ExportPdfButton } from "@/components/ExportRecipeButton";
 import { PetProfilePane, defaultPetProfile, type PetProfileState } from "@/components/recipe/PetProfile";
 import { VolumeAndTargets, type MacroTargets } from "@/components/recipe/VolumeAndTargets";
 import { StartingVolumeStrip } from "@/components/recipe/StartingVolumeStrip";

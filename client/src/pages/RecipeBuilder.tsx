@@ -15,12 +15,16 @@ import { t } from "@/lib/i18n";
 import { type AafcoRow, aafcoComparison, dailyFeed, recipeMacros, recipeTotals, type RecipeItem } from "@shared/calc";
 import { DOG_LIFE_STAGES, CAT_LIFE_STAGES } from "@shared/aafco";
 import type { Ingredient } from "@shared/ingredients";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, Eye } from "lucide-react";
+import { TRPCClientError } from "@trpc/client";
 
-import { ExportPdfButton } from "@/components/ExportPdfButton";
+import { ExportRecipeButton } from "@/components/ExportRecipeButton";
+import { ShareDialog } from "@/components/recipe/ShareDialog";
+import { HistoryPanel } from "@/components/recipe/HistoryPanel";
+import { ConflictDialog, type ConflictInfo } from "@/components/recipe/ConflictDialog";
 import { RebalanceSheet } from "@/components/recipe/RebalanceSheet";
 import { Sparkles } from "lucide-react";
 import { PetProfilePane, defaultPetProfile, type PetProfileState } from "@/components/recipe/PetProfile";
@@ -53,6 +57,12 @@ export default function RecipeBuilder() {
   const [recipeStatus, setRecipeStatus] = useState<"draft" | "approved">("draft");
   const [basis, setBasis] = useState<"dm" | "me">("dm");
 
+  // Tracks the last-known server timestamp so update can detect concurrent
+  // edits via the server's `expectedUpdatedAt` check.
+  const expectedUpdatedAtRef = useRef<Date | null>(null);
+  const [role, setRole] = useState<"owner" | "editor" | "viewer" | null>(null);
+  const isReadOnly = role === "viewer";
+
   // Load recipe if editing
   const recipeQuery = trpc.recipes.get.useQuery(
     { id: recipeId! },
@@ -65,6 +75,8 @@ export default function RecipeBuilder() {
     setNotes(r.notes ?? "");
     setRecipeStatus(r.status as "draft" | "approved");
     setStartingVolume(r.startingVolumeG);
+    setRole(r.role);
+    expectedUpdatedAtRef.current = r.updatedAt ? new Date(r.updatedAt) : null;
     setTargets({
       proteinPct: r.targetProteinPct ? parseFloat(String(r.targetProteinPct)) : 45,
       carbPct: r.targetCarbPct ? parseFloat(String(r.targetCarbPct)) : 25,
@@ -109,6 +121,7 @@ export default function RecipeBuilder() {
 
   // Add / change / remove
   function addIngredient(ing: Ingredient, defaultGrams: number) {
+    if (isReadOnly) return;
     setItems((prev) => {
       const existing = prev.find((p) => p.ingredientId === ing.id);
       if (existing) return prev;
@@ -116,6 +129,7 @@ export default function RecipeBuilder() {
     });
   }
   function removeItem(ingredientId: number) {
+    if (isReadOnly) return;
     setItems((prev) => prev.filter((p) => p.ingredientId !== ingredientId));
     setLocks((prev) => {
       if (!prev.has(ingredientId)) return prev;
@@ -125,6 +139,7 @@ export default function RecipeBuilder() {
     });
   }
   function toggleLock(ingredientId: number) {
+    if (isReadOnly) return;
     setLocks((prev) => {
       const next = new Set(prev);
       if (next.has(ingredientId)) next.delete(ingredientId);
@@ -144,22 +159,39 @@ export default function RecipeBuilder() {
     onError: (e) => toast.error(e.message),
   });
   const updateMut = trpc.recipes.update.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       utils.recipes.list.invalidate();
       utils.recipes.get.invalidate({ id: recipeId! });
+      utils.recipes.history.invalidate({ id: recipeId! });
+      if (data.updatedAt) expectedUpdatedAtRef.current = new Date(data.updatedAt);
       toast.success(t("update_recipe", lang) + " ✓");
+    },
+    onError: (e) => {
+      const conflict = parseConflict(e);
+      if (conflict) {
+        setConflictInfo(conflict);
+        setConflictOpen(true);
+      } else {
+        toast.error(e.message);
+      }
+    },
+  });
+  const duplicateMut = trpc.recipes.duplicate.useMutation({
+    onSuccess: (data) => {
+      utils.recipes.list.invalidate();
+      toast.success("Saved as duplicate");
+      setConflictOpen(false);
+      navigate(`/recipe/${data.id}`);
     },
     onError: (e) => toast.error(e.message),
   });
 
   const [saveOpen, setSaveOpen] = useState(false);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<ConflictInfo | null>(null);
 
-  function commitSave() {
-    if (!recipeName.trim()) {
-      toast.error("Recipe name required");
-      return;
-    }
-    const payload = {
+  function buildPayload() {
+    return {
       name: recipeName.trim(),
       notes: notes.trim(),
       status: recipeStatus,
@@ -176,9 +208,35 @@ export default function RecipeBuilder() {
       petId: pet.petId,
       items: items.map((i) => ({ ingredientId: i.ingredientId, grams: i.grams })),
     };
-    if (isEditing) updateMut.mutate({ id: recipeId!, data: payload });
-    else createMut.mutate(payload);
+  }
+
+  function commitSave(opts?: { force?: boolean }) {
+    if (!recipeName.trim()) {
+      toast.error("Recipe name required");
+      return;
+    }
+    const payload = buildPayload();
+    if (isEditing) {
+      updateMut.mutate({
+        id: recipeId!,
+        data: payload,
+        // Force-overwrite skips the concurrency check; otherwise we send the
+        // last-known server timestamp so the server can reject stale writes.
+        expectedUpdatedAt: opts?.force ? null : expectedUpdatedAtRef.current,
+      });
+    } else {
+      createMut.mutate(payload);
+    }
     setSaveOpen(false);
+  }
+
+  function onOverwriteConflict() {
+    commitSave({ force: true });
+  }
+
+  function onDuplicateConflict() {
+    if (!isEditing) return;
+    duplicateMut.mutate({ id: recipeId! });
   }
 
   const isSaving = createMut.isPending || updateMut.isPending;
@@ -190,86 +248,89 @@ export default function RecipeBuilder() {
         {/* Header row */}
         <div className="flex items-center justify-between mb-6 gap-4">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
               {isEditing ? t("update_recipe", lang) : t("nav_new", lang)}
+              {role && role !== "owner" && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 normal-case tracking-normal">
+                  {role === "viewer" && <Eye className="size-3" />}
+                  Shared with you · {role}
+                </span>
+              )}
             </div>
             <h1 className="font-display text-3xl font-bold mt-1">
               {recipeName || t("nav_new", lang)}
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            {isEditing && items.length > 0 && (
+            {isEditing && items.length > 0 && !isReadOnly && (
               <Button variant="outline" size="sm" onClick={() => setRebalanceOpen(true)}>
                 <Sparkles className="size-4" />
                 {t("rebalance_title", lang)}
               </Button>
             )}
-            <ExportPdfButton recipeId={isEditing ? recipeId : undefined} />
-            <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={items.length === 0 || isSaving}>
-                  {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                  {isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label>{t("recipe_name", lang)}</Label>
-                    <Input
-                      value={recipeName}
-                      onChange={(e) => setRecipeName(e.target.value)}
-                      placeholder="e.g., Bella's senior chicken"
-                      autoFocus
-                      className="mt-1.5"
-                    />
-                  </div>
-                  <div>
-                    <Label>{t("notes", lang)}</Label>
-                    <Textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={3}
-                      className="mt-1.5"
-                    />
-                  </div>
-                  <div>
-                    <Label>{t("status", lang)}</Label>
-                    <Select value={recipeStatus} onValueChange={(v) => setRecipeStatus(v as "draft" | "approved")}>
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">{t("status_draft", lang)}</SelectItem>
-                        <SelectItem value="approved">{t("status_approved", lang)}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setSaveOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={commitSave}>
+            {isEditing && <HistoryPanel recipeId={recipeId!} />}
+            {isEditing && role === "owner" && <ShareDialog recipeId={recipeId!} role={role} />}
+            <ExportRecipeButton recipeId={isEditing ? recipeId : undefined} />
+            {!isReadOnly && (
+              <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+                <DialogTrigger asChild>
+                  <Button disabled={items.length === 0 || isSaving}>
+                    {isSaving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
                     {isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>{t("recipe_name", lang)}</Label>
+                      <Input
+                        value={recipeName}
+                        onChange={(e) => setRecipeName(e.target.value)}
+                        placeholder="e.g., Bella's senior chicken"
+                        autoFocus
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label>{t("notes", lang)}</Label>
+                      <Textarea
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        rows={3}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label>{t("status", lang)}</Label>
+                      <Select value={recipeStatus} onValueChange={(v) => setRecipeStatus(v as "draft" | "approved")}>
+                        <SelectTrigger className="mt-1.5">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">{t("status_draft", lang)}</SelectItem>
+                          <SelectItem value="approved">{t("status_approved", lang)}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setSaveOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={() => commitSave()}>
+                      {isEditing ? t("update_recipe", lang) : t("save_recipe", lang)}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
 
-        {/* Final layout (v0.2.4):
-             - Left rail (lg:col-span-4):
-                 • PetProfile (collapses to one-line summary once filled)
-                 • Summary (manual collapse)
-                 • RecipeItemsList (the selected ingredients) — always visible; pushed down when above are expanded
-             - Center (lg:col-span-4): IngredientPicker only (sticky)
-             - Right (lg:col-span-4): AafcoPanel + collapsed StartingVolumeStrip + collapsed Macro Targets
-        */}
+        <fieldset disabled={isReadOnly} className={isReadOnly ? "opacity-95" : ""}>
         <div className="grid grid-cols-12 gap-5">
           {/* Left rail */}
           <div className="col-span-12 lg:col-span-4 space-y-4">
@@ -364,7 +425,29 @@ export default function RecipeBuilder() {
             }}
           />
         </div>
+        </fieldset>
       </div>
+
+      <ConflictDialog
+        open={conflictOpen}
+        onOpenChange={setConflictOpen}
+        conflict={conflictInfo}
+        onOverwrite={onOverwriteConflict}
+        onDuplicate={onDuplicateConflict}
+        pending={updateMut.isPending || duplicateMut.isPending}
+      />
     </AppShell>
   );
+}
+
+/**
+ * The server signals concurrent-edit via TRPCError(code="CONFLICT"). We
+ * pull the structured `cause` (lastUpdatedAt, lastUpdatedByName) off the
+ * client error so the dialog can show *who* changed the recipe and *when*.
+ */
+function parseConflict(err: unknown): ConflictInfo | null {
+  if (!(err instanceof TRPCClientError)) return null;
+  if (err.data?.code !== "CONFLICT") return null;
+  const cause = (err.shape?.data as { cause?: ConflictInfo } | undefined)?.cause;
+  return cause ?? {};
 }

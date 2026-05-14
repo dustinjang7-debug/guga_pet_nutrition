@@ -36,6 +36,11 @@ import {
 import { suggestRemediations, formatGrams } from "@shared/gapSuggester";
 import { INGREDIENT_BY_ID } from "@shared/ingredients";
 import { type PdfLang, pt } from "@shared/pdfI18n";
+import {
+  PDF_EMBED_MARKER_PREFIX,
+  makeRecipeFile,
+  type PortableRecipe,
+} from "@shared/recipeFile";
 
 // ---- Constants ----------------------------------------------------------
 
@@ -761,7 +766,39 @@ export async function generateRecipePdf(input: GeneratePdfInput): Promise<Buffer
   drawFooter(doc, lang);
 
   doc.end();
-  return done;
+  const pdfBuffer = await done;
+
+  // Append a portable recipe file after %%EOF so the same PDF can be
+  // re-imported into another account. PDF readers stop parsing at %%EOF,
+  // so trailing bytes don't affect rendering.
+  const portable = recipeToPortableInput(input);
+  if (portable) {
+    const fileJson = JSON.stringify(makeRecipeFile(portable));
+    const marker = `\n${PDF_EMBED_MARKER_PREFIX}${Buffer.from(fileJson, "utf8").toString("base64")}\n`;
+    return Buffer.concat([pdfBuffer, Buffer.from(marker, "utf8")]);
+  }
+  return pdfBuffer;
+}
+
+function recipeToPortableInput(input: GeneratePdfInput): PortableRecipe | null {
+  const r = input.recipe;
+  if (!r.name) return null;
+  return {
+    name: r.name,
+    petName: r.petName ?? null,
+    petId: r.petId ?? null,
+    species: r.species,
+    lifeStage: r.lifeStageKey,
+    bodyWeightKg: r.bodyWeightKg,
+    lifeStageFactor: r.lifeStageFactor,
+    feedingMode: "normal",
+    workflow: "simple",
+    startingVolumeG: 1000,
+    targetProteinPct: null,
+    targetCarbPct: null,
+    items: r.items.map((it) => ({ ingredientId: it.ingredientId, grams: it.grams })),
+    notes: r.notes ?? null,
+  };
 }
 
 void AAFCO_DOG; void AAFCO_CAT;

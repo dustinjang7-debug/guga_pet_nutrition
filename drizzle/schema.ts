@@ -1,10 +1,37 @@
-import { integer, jsonb, numeric, pgEnum, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["user", "admin"]);
 export const speciesEnum = pgEnum("species", ["dog", "cat"]);
 export const feedingModeEnum = pgEnum("feeding_mode", ["normal", "weight_loss"]);
 export const workflowEnum = pgEnum("workflow", ["wizard", "simple", "premix"]);
 export const recipeStatusEnum = pgEnum("recipe_status", ["draft", "approved"]);
+export const collaboratorRoleEnum = pgEnum("collaborator_role", ["editor", "viewer"]);
+export const recipeActivityActionEnum = pgEnum("recipe_activity_action", [
+  "created",
+  "edited",
+  "status_changed",
+  "shared",
+  "link_rotated",
+  "link_disabled",
+  "collaborator_added",
+  "collaborator_role_changed",
+  "collaborator_removed",
+  "imported_from_pdf",
+  "imported_from_file",
+  "duplicated",
+]);
 
 /**
  * Core user table backing auth flow.
@@ -30,17 +57,13 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * Recipe records owned by a user. Each recipe captures the pet profile,
  * the macro targets, the workflow used, and the list of ingredients (as JSON).
- *
- * We keep ingredient-list inside `items` JSON instead of a separate table for
- * three reasons: ingredients are tightly coupled to the recipe, we never query
- * across recipes by ingredient, and JSON keeps the schema simple.
  */
 export const recipes = pgTable("recipes", {
   id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(), // FK -> users.id
+  userId: integer("userId").notNull(), // FK -> users.id (owner)
   name: varchar("name", { length: 200 }).notNull(),
   petName: varchar("petName", { length: 100 }),
-  petId: varchar("petId", { length: 64 }), // free-text client/owner ID
+  petId: varchar("petId", { length: 64 }),
   species: speciesEnum("species").notNull(),
   lifeStage: varchar("lifeStage", { length: 64 }).notNull(),
   bodyWeightKg: numeric("bodyWeightKg", { precision: 6, scale: 2 }).notNull(),
@@ -54,6 +77,8 @@ export const recipes = pgTable("recipes", {
   items: jsonb("items").notNull(),
   notes: text("notes"),
   status: recipeStatusEnum("status").default("draft").notNull(),
+  /** Last user that wrote this recipe (owner or editor); null for legacy rows. */
+  updatedByUserId: integer("updatedByUserId"),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { withTimezone: true })
     .defaultNow()
@@ -63,3 +88,57 @@ export const recipes = pgTable("recipes", {
 
 export type Recipe = typeof recipes.$inferSelect;
 export type InsertRecipe = typeof recipes.$inferInsert;
+
+/**
+ * People other than the owner who can view or edit a recipe.
+ * The owner is implicit (recipes.userId) and is never written here.
+ */
+export const recipeCollaborators = pgTable(
+  "recipe_collaborators",
+  {
+    id: serial("id").primaryKey(),
+    recipeId: integer("recipeId").notNull(),
+    userId: integer("userId").notNull(),
+    role: collaboratorRoleEnum("role").notNull(),
+    addedAt: timestamp("addedAt", { withTimezone: true }).defaultNow().notNull(),
+    addedByUserId: integer("addedByUserId").notNull(),
+  },
+  (t) => ({
+    recipeUserUnique: uniqueIndex("recipe_collaborators_recipe_user_unique").on(
+      t.recipeId,
+      t.userId,
+    ),
+  }),
+);
+
+export type RecipeCollaborator = typeof recipeCollaborators.$inferSelect;
+
+/**
+ * One active share link per recipe. Rotating the link replaces the token.
+ */
+export const recipeShareLinks = pgTable("recipe_share_links", {
+  id: serial("id").primaryKey(),
+  recipeId: integer("recipeId").notNull().unique(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
+  revokedAt: timestamp("revokedAt", { withTimezone: true }),
+});
+
+export type RecipeShareLink = typeof recipeShareLinks.$inferSelect;
+
+/**
+ * Append-only activity log per recipe. Written inside the same DB call as
+ * the change it describes so the log can never disagree with the data.
+ */
+export const recipeActivity = pgTable("recipe_activity", {
+  id: serial("id").primaryKey(),
+  recipeId: integer("recipeId").notNull(),
+  actorUserId: integer("actorUserId").notNull(),
+  action: recipeActivityActionEnum("action").notNull(),
+  payload: jsonb("payload"),
+  createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type RecipeActivity = typeof recipeActivity.$inferSelect;

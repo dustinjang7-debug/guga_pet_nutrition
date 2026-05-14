@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { ExportPdfButton } from "@/components/ExportPdfButton";
+import { ExportRecipeButton as ExportPdfButton } from "@/components/ExportRecipeButton";
 import { ingredientName, t, useLang } from "@/lib/i18n";
 import {
   type AafcoRow, aafcoComparison, carbKcalShare, type CarbKcalShare,

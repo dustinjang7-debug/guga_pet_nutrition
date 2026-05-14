@@ -1,17 +1,32 @@
 import { COOKIE_NAME } from "@shared/const";
+import { portableRecipeSchema } from "@shared/recipeFile";
 import { TRPCError } from "@trpc/server";
+import crypto from "crypto";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
+  addOrUpdateCollaborator,
+  appendActivity,
   createRecipe,
-  deleteRecipe,
-  getRecipeById,
+  deleteRecipeById,
+  disableShareLink,
+  getRecipeRowById,
+  getShareLinkByRecipe,
+  getShareLinkByToken,
+  getUserById,
+  listActivityForRecipe,
+  listCollaborators,
   listRecipesByUser,
-  updateRecipe,
+  removeCollaborator,
+  updateRecipeById,
+  upsertShareLink,
 } from "./db";
 import { generateRecipePdf } from "./pdfExport";
+import { canManageSharing, canWrite, getRecipeAccess } from "./recipeAccess";
+import { diffRecipes, isEmptyDiff } from "./recipeDiff";
+import { ImportError, parseRecipeImport } from "./recipeImport";
 
 const recipeItemSchema = z.object({
   ingredientId: z.number().int().positive(),
@@ -36,10 +51,73 @@ const recipeInputSchema = z.object({
   status: z.enum(["draft", "approved"]).default("draft"),
 });
 
+type RecipeInput = z.infer<typeof recipeInputSchema>;
+
+function inputToInsert(userId: number, input: RecipeInput) {
+  return {
+    userId,
+    name: input.name,
+    petName: input.petName ?? null,
+    petId: input.petId ?? null,
+    species: input.species,
+    lifeStage: input.lifeStage,
+    bodyWeightKg: input.bodyWeightKg.toString(),
+    lifeStageFactor: input.lifeStageFactor.toString(),
+    feedingMode: input.feedingMode,
+    workflow: input.workflow,
+    startingVolumeG: input.startingVolumeG,
+    targetProteinPct: input.targetProteinPct?.toString() ?? null,
+    targetCarbPct: input.targetCarbPct?.toString() ?? null,
+    items: input.items,
+    notes: input.notes ?? null,
+    status: input.status,
+    updatedByUserId: userId,
+  };
+}
+
+function partialInputToPatch(d: Partial<RecipeInput>, actorUserId: number) {
+  return {
+    ...(d.name !== undefined && { name: d.name }),
+    ...(d.petName !== undefined && { petName: d.petName ?? null }),
+    ...(d.petId !== undefined && { petId: d.petId ?? null }),
+    ...(d.species !== undefined && { species: d.species }),
+    ...(d.lifeStage !== undefined && { lifeStage: d.lifeStage }),
+    ...(d.bodyWeightKg !== undefined && { bodyWeightKg: d.bodyWeightKg.toString() }),
+    ...(d.lifeStageFactor !== undefined && { lifeStageFactor: d.lifeStageFactor.toString() }),
+    ...(d.feedingMode !== undefined && { feedingMode: d.feedingMode }),
+    ...(d.workflow !== undefined && { workflow: d.workflow }),
+    ...(d.startingVolumeG !== undefined && { startingVolumeG: d.startingVolumeG }),
+    ...(d.targetProteinPct !== undefined && {
+      targetProteinPct: d.targetProteinPct?.toString() ?? null,
+    }),
+    ...(d.targetCarbPct !== undefined && {
+      targetCarbPct: d.targetCarbPct?.toString() ?? null,
+    }),
+    ...(d.items !== undefined && { items: d.items }),
+    ...(d.notes !== undefined && { notes: d.notes ?? null }),
+    ...(d.status !== undefined && { status: d.status }),
+    updatedByUserId: actorUserId,
+    updatedAt: new Date(),
+  };
+}
+
+async function readRecipeWithRole(recipeId: number, userId: number) {
+  const access = await getRecipeAccess(recipeId, userId);
+  if (!access.recipe || !access.role) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Recipe not found" });
+  }
+  return access;
+}
+
+async function newShareToken(): Promise<string> {
+  // 32 random bytes -> 43-char base64url. Tokens are unguessable but compact.
+  return crypto.randomBytes(32).toString("base64url");
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -53,83 +131,423 @@ export const appRouter = router({
     get: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
-        const r = await getRecipeById(ctx.user.id, input.id);
-        if (!r) throw new TRPCError({ code: "NOT_FOUND", message: "Recipe not found" });
-        return r;
+        const { recipe, role } = await readRecipeWithRole(input.id, ctx.user.id);
+        return { ...recipe!, role };
       }),
 
     create: protectedProcedure
       .input(recipeInputSchema)
       .mutation(async ({ ctx, input }) => {
-        const id = await createRecipe({
-          userId: ctx.user.id,
-          name: input.name,
-          petName: input.petName ?? null,
-          petId: input.petId ?? null,
-          species: input.species,
-          lifeStage: input.lifeStage,
-          bodyWeightKg: input.bodyWeightKg.toString(),
-          lifeStageFactor: input.lifeStageFactor.toString(),
-          feedingMode: input.feedingMode,
-          workflow: input.workflow,
-          startingVolumeG: input.startingVolumeG,
-          targetProteinPct: input.targetProteinPct?.toString() ?? null,
-          targetCarbPct: input.targetCarbPct?.toString() ?? null,
-          items: input.items,
-          notes: input.notes ?? null,
-          status: input.status,
+        const r = await createRecipe(inputToInsert(ctx.user.id, input));
+        await appendActivity({
+          recipeId: r.id,
+          actorUserId: ctx.user.id,
+          action: "created",
+          payload: { name: r.name },
         });
-        return { id };
+        return { id: r.id };
       }),
 
+    /**
+     * Last-write-wins update with optional optimistic concurrency.
+     *
+     * If `expectedUpdatedAt` is supplied and the row has moved on since the
+     * client loaded it, we throw `CONFLICT` with structured cause data so
+     * the client can show a "someone else edited this" dialog and offer
+     * Overwrite / Save as duplicate / Cancel.
+     */
     update: protectedProcedure
-      .input(z.object({ id: z.number().int().positive(), data: recipeInputSchema.partial() }))
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          data: recipeInputSchema.partial(),
+          expectedUpdatedAt: z.date().nullish(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const existing = await getRecipeById(ctx.user.id, input.id);
-        if (!existing) throw new TRPCError({ code: "NOT_FOUND" });
-        const d = input.data;
-        await updateRecipe(ctx.user.id, input.id, {
-          ...(d.name !== undefined && { name: d.name }),
-          ...(d.petName !== undefined && { petName: d.petName }),
-          ...(d.petId !== undefined && { petId: d.petId }),
-          ...(d.species !== undefined && { species: d.species }),
-          ...(d.lifeStage !== undefined && { lifeStage: d.lifeStage }),
-          ...(d.bodyWeightKg !== undefined && { bodyWeightKg: d.bodyWeightKg.toString() }),
-          ...(d.lifeStageFactor !== undefined && { lifeStageFactor: d.lifeStageFactor.toString() }),
-          ...(d.feedingMode !== undefined && { feedingMode: d.feedingMode }),
-          ...(d.workflow !== undefined && { workflow: d.workflow }),
-          ...(d.startingVolumeG !== undefined && { startingVolumeG: d.startingVolumeG }),
-          ...(d.targetProteinPct !== undefined && { targetProteinPct: d.targetProteinPct?.toString() ?? null }),
-          ...(d.targetCarbPct !== undefined && { targetCarbPct: d.targetCarbPct?.toString() ?? null }),
-          ...(d.items !== undefined && { items: d.items }),
-          ...(d.notes !== undefined && { notes: d.notes }),
-          ...(d.status !== undefined && { status: d.status }),
+        const { recipe, role } = await readRecipeWithRole(input.id, ctx.user.id);
+        if (!canWrite(role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Read-only access" });
+        }
+        if (input.expectedUpdatedAt && recipe!.updatedAt) {
+          const expected = input.expectedUpdatedAt.getTime();
+          const actual = recipe!.updatedAt.getTime();
+          if (Math.abs(actual - expected) > 1) {
+            // Look up the last writer's display name for a friendlier dialog.
+            const writer = recipe!.updatedByUserId
+              ? await getUserById(recipe!.updatedByUserId)
+              : undefined;
+            throw new TRPCError({
+              code: "CONFLICT",
+              message: "Recipe was modified by someone else",
+              cause: {
+                kind: "stale-update",
+                lastUpdatedAt: recipe!.updatedAt.toISOString(),
+                lastUpdatedByName: writer?.name ?? writer?.email ?? null,
+              },
+            });
+          }
+        }
+        const patch = partialInputToPatch(input.data, ctx.user.id);
+        const updated = await updateRecipeById(input.id, patch);
+        if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
+        const diff = diffRecipes(recipe!, updated);
+        if (!isEmptyDiff(diff)) {
+          await appendActivity({
+            recipeId: input.id,
+            actorUserId: ctx.user.id,
+            action:
+              diff.fields.length === 1 && diff.fields[0]?.field === "status"
+                ? "status_changed"
+                : "edited",
+            payload: { diff },
+          });
+        }
+        return { success: true, updatedAt: updated.updatedAt } as const;
+      }),
+
+    /**
+     * Save a copy of the recipe under the current user's account. Used by
+     * the conflict dialog ("Save as duplicate") and by collaborators who
+     * want their own forkable copy.
+     */
+    duplicate: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), nameSuffix: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { recipe } = await readRecipeWithRole(input.id, ctx.user.id);
+        const r = recipe!;
+        const created = await createRecipe({
+          userId: ctx.user.id,
+          name: `${r.name}${input.nameSuffix ?? " (copy)"}`.slice(0, 200),
+          petName: r.petName,
+          petId: r.petId,
+          species: r.species,
+          lifeStage: r.lifeStage,
+          bodyWeightKg: r.bodyWeightKg,
+          lifeStageFactor: r.lifeStageFactor,
+          feedingMode: r.feedingMode,
+          workflow: r.workflow,
+          startingVolumeG: r.startingVolumeG,
+          targetProteinPct: r.targetProteinPct,
+          targetCarbPct: r.targetCarbPct,
+          items: r.items,
+          notes: r.notes,
+          status: "draft",
+          updatedByUserId: ctx.user.id,
         });
-        return { success: true } as const;
+        await appendActivity({
+          recipeId: created.id,
+          actorUserId: ctx.user.id,
+          action: "duplicated",
+          payload: { sourceRecipeId: r.id, sourceName: r.name },
+        });
+        return { id: created.id };
       }),
 
     delete: protectedProcedure
       .input(z.object({ id: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
-        await deleteRecipe(ctx.user.id, input.id);
+        const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+        if (role !== "owner") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can delete" });
+        }
+        await deleteRecipeById(input.id);
         return { success: true } as const;
       }),
 
     /**
-     * Export an EN/ZH/TH PDF for a saved recipe.
-     *
-     * Uses a tRPC mutation (not query) because (a) PDF generation is a
-     * non-idempotent side effect from the user's perspective and (b) the
-     * superjson transformer happily moves Buffers across the wire as base64.
+     * Append-only activity log for a recipe. Owners and collaborators can read.
      */
-    exportPdf: protectedProcedure
-      .input(z.object({
-        id: z.number().int().positive(),
-        lang: z.enum(["en", "zh", "th"]).default("en"),
-      }))
+    history: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        await readRecipeWithRole(input.id, ctx.user.id);
+        return listActivityForRecipe(input.id);
+      }),
+
+    /**
+     * Import a recipe from either a `.guga.json` file or a previously
+     * exported PDF (which carries the same JSON after %%EOF). Always creates
+     * a draft owned by the current user.
+     */
+    import: protectedProcedure
+      .input(
+        z.object({
+          base64: z.string().min(1),
+          contentType: z.string().nullish(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
-        const r = await getRecipeById(ctx.user.id, input.id);
-        if (!r) throw new TRPCError({ code: "NOT_FOUND", message: "Recipe not found" });
+        const buf = Buffer.from(input.base64, "base64");
+        let parsed;
+        try {
+          parsed = parseRecipeImport(buf, input.contentType ?? null);
+        } catch (e) {
+          if (e instanceof ImportError) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: e.message });
+          }
+          throw e;
+        }
+        const r = parsed.recipe;
+        const created = await createRecipe({
+          userId: ctx.user.id,
+          name: `${r.name} (imported)`.slice(0, 200),
+          petName: r.petName ?? null,
+          petId: r.petId ?? null,
+          species: r.species,
+          lifeStage: r.lifeStage,
+          bodyWeightKg: r.bodyWeightKg.toString(),
+          lifeStageFactor: r.lifeStageFactor.toString(),
+          feedingMode: r.feedingMode,
+          workflow: r.workflow,
+          startingVolumeG: r.startingVolumeG,
+          targetProteinPct: r.targetProteinPct?.toString() ?? null,
+          targetCarbPct: r.targetCarbPct?.toString() ?? null,
+          items: r.items,
+          notes: r.notes ?? null,
+          status: "draft",
+          updatedByUserId: ctx.user.id,
+        });
+        await appendActivity({
+          recipeId: created.id,
+          actorUserId: ctx.user.id,
+          action: parsed.source === "pdf" ? "imported_from_pdf" : "imported_from_file",
+          payload: {
+            sourceName: r.name,
+            droppedIngredientIds: parsed.unknownIngredientIds,
+          },
+        });
+        return {
+          id: created.id,
+          source: parsed.source,
+          unknownIngredientIds: parsed.unknownIngredientIds,
+        };
+      }),
+
+    /**
+     * Sharing — link + collaborator management. Owner-only.
+     */
+    share: router({
+      get: protectedProcedure
+        .input(z.object({ id: z.number().int().positive() }))
+        .query(async ({ ctx, input }) => {
+          const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+          const link = await getShareLinkByRecipe(input.id);
+          const collaborators = await listCollaborators(input.id);
+          return {
+            role,
+            link: link
+              ? {
+                  token: link.token,
+                  isActive: link.isActive,
+                  createdAt: link.createdAt,
+                  revokedAt: link.revokedAt,
+                }
+              : null,
+            collaborators,
+          };
+        }),
+
+      createOrRotate: protectedProcedure
+        .input(z.object({ id: z.number().int().positive() }))
+        .mutation(async ({ ctx, input }) => {
+          const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+          if (!canManageSharing(role)) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can share" });
+          }
+          const token = await newShareToken();
+          await upsertShareLink({
+            recipeId: input.id,
+            token,
+            createdByUserId: ctx.user.id,
+          });
+          await appendActivity({
+            recipeId: input.id,
+            actorUserId: ctx.user.id,
+            action: "link_rotated",
+          });
+          return { token };
+        }),
+
+      disable: protectedProcedure
+        .input(z.object({ id: z.number().int().positive() }))
+        .mutation(async ({ ctx, input }) => {
+          const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+          if (!canManageSharing(role)) {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          await disableShareLink(input.id);
+          await appendActivity({
+            recipeId: input.id,
+            actorUserId: ctx.user.id,
+            action: "link_disabled",
+          });
+          return { success: true } as const;
+        }),
+
+      setRole: protectedProcedure
+        .input(
+          z.object({
+            id: z.number().int().positive(),
+            userId: z.number().int().positive(),
+            role: z.enum(["viewer", "editor"]),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+          if (!canManageSharing(role)) {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          const targetUser = await getUserById(input.userId);
+          if (!targetUser) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+          }
+          const result = await addOrUpdateCollaborator({
+            recipeId: input.id,
+            userId: input.userId,
+            role: input.role,
+            addedByUserId: ctx.user.id,
+          });
+          await appendActivity({
+            recipeId: input.id,
+            actorUserId: ctx.user.id,
+            action: result.created ? "collaborator_added" : "collaborator_role_changed",
+            payload: {
+              targetUserId: input.userId,
+              targetUserName: targetUser.name ?? targetUser.email ?? null,
+              role: input.role,
+            },
+          });
+          return { success: true } as const;
+        }),
+
+      removeCollaborator: protectedProcedure
+        .input(
+          z.object({
+            id: z.number().int().positive(),
+            userId: z.number().int().positive(),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+          if (!canManageSharing(role)) {
+            throw new TRPCError({ code: "FORBIDDEN" });
+          }
+          const targetUser = await getUserById(input.userId);
+          await removeCollaborator(input.id, input.userId);
+          await appendActivity({
+            recipeId: input.id,
+            actorUserId: ctx.user.id,
+            action: "collaborator_removed",
+            payload: {
+              targetUserId: input.userId,
+              targetUserName: targetUser?.name ?? targetUser?.email ?? null,
+            },
+          });
+          return { success: true } as const;
+        }),
+
+      /**
+       * Visit a share link. If the visitor is signed in and isn't already
+       * the owner or a collaborator, they're added as a viewer. The owner
+       * can later promote them to editor via `setRole`.
+       *
+       * Token-only metadata (no user) returns just `{ recipeId, name }` so
+       * the public landing page can show what's behind the link.
+       */
+      lookupByToken: publicProcedure
+        .input(z.object({ token: z.string().min(8).max(128) }))
+        .query(async ({ input }) => {
+          const link = await getShareLinkByToken(input.token);
+          if (!link || !link.isActive) return null;
+          const recipe = await getRecipeRowById(link.recipeId);
+          if (!recipe) return null;
+          return {
+            recipeId: recipe.id,
+            recipeName: recipe.name,
+            species: recipe.species,
+          };
+        }),
+
+      join: protectedProcedure
+        .input(z.object({ token: z.string().min(8).max(128) }))
+        .mutation(async ({ ctx, input }) => {
+          const link = await getShareLinkByToken(input.token);
+          if (!link || !link.isActive) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Share link inactive" });
+          }
+          const access = await getRecipeAccess(link.recipeId, ctx.user.id);
+          if (access.role) {
+            return { recipeId: link.recipeId, role: access.role };
+          }
+          await addOrUpdateCollaborator({
+            recipeId: link.recipeId,
+            userId: ctx.user.id,
+            role: "viewer",
+            addedByUserId: link.createdByUserId,
+          });
+          await appendActivity({
+            recipeId: link.recipeId,
+            actorUserId: ctx.user.id,
+            action: "collaborator_added",
+            payload: {
+              targetUserId: ctx.user.id,
+              targetUserName: ctx.user.name ?? ctx.user.email ?? null,
+              role: "viewer",
+              via: "share-link",
+            },
+          });
+          return { recipeId: link.recipeId, role: "viewer" as const };
+        }),
+    }),
+
+    /**
+     * Download the recipe as a portable `.guga.json` file. Embedded
+     * verbatim inside the exported PDF as well.
+     */
+    exportRecipeFile: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const { recipe } = await readRecipeWithRole(input.id, ctx.user.id);
+        const r = recipe!;
+        const portable = portableRecipeSchema.parse({
+          name: r.name,
+          petName: r.petName ?? null,
+          petId: r.petId ?? null,
+          species: r.species,
+          lifeStage: r.lifeStage,
+          bodyWeightKg: Number(r.bodyWeightKg),
+          lifeStageFactor: Number(r.lifeStageFactor),
+          feedingMode: r.feedingMode,
+          workflow: r.workflow,
+          startingVolumeG: r.startingVolumeG,
+          targetProteinPct: r.targetProteinPct ? Number(r.targetProteinPct) : null,
+          targetCarbPct: r.targetCarbPct ? Number(r.targetCarbPct) : null,
+          items: (r.items as { ingredientId: number; grams: number }[]) ?? [],
+          notes: r.notes ?? null,
+        });
+        const file = {
+          guga: 1 as const,
+          exportedAt: new Date().toISOString(),
+          recipe: portable,
+        };
+        const json = JSON.stringify(file, null, 2);
+        return {
+          base64: Buffer.from(json, "utf8").toString("base64"),
+          filename: `GUGA_${slugify(r.name)}.guga.json`,
+        };
+      }),
+
+    exportPdf: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          lang: z.enum(["en", "zh", "th"]).default("en"),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { recipe } = await readRecipeWithRole(input.id, ctx.user.id);
+        const r = recipe!;
         const pdf = await generateRecipePdf({
           lang: input.lang,
           recipe: {
@@ -157,12 +575,14 @@ export const appRouter = router({
 });
 
 function slugify(s: string): string {
-  return s
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9-_]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "recipe";
+  return (
+    s
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9-_]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "recipe"
+  );
 }
 
 export type AppRouter = typeof appRouter;
