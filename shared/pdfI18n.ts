@@ -33,6 +33,8 @@ export interface PdfDict {
   saved_at: string;
   status_draft: string;
   status_approved: string;
+  owner: string;
+  pet_id: string;
 
   // Recipe table
   current_recipe_title: string;
@@ -40,6 +42,31 @@ export interface PdfDict {
   grams_col: string;
   pct_col: string;
   kcal_col: string;
+
+  // Macro profile
+  macros_title: string;
+  macro_protein: string;
+  macro_fat: string;
+  macro_carb: string;
+  macro_fiber: string;
+  macro_ash: string;
+  macro_moisture: string;
+  col_pct_dm: string;
+  col_pct_me: string;
+  col_grams: string;
+
+  // Per-ingredient nutrient contribution
+  nutrient_contrib_title: string;
+  col_protein_g: string;
+  col_fat_g: string;
+  col_carb_g: string;
+  col_fiber_g: string;
+  col_water_g: string;
+  total_row: string;
+
+  // Notes
+  notes_title: string;
+  notes_empty: string;
 
   // AAFCO table
   aafco_title: string;
@@ -92,12 +119,36 @@ const en: PdfDict = {
   saved_at: "Saved",
   status_draft: "Draft",
   status_approved: "Approved",
+  owner: "Owner",
+  pet_id: "Pet ID",
 
   current_recipe_title: "Current Recipe",
   ingredient: "Ingredient",
   grams_col: "Grams",
   pct_col: "% of recipe",
   kcal_col: "kcal",
+
+  macros_title: "Macronutrient Profile",
+  macro_protein: "Protein",
+  macro_fat: "Fat",
+  macro_carb: "Carbohydrate",
+  macro_fiber: "Fiber",
+  macro_ash: "Ash / other",
+  macro_moisture: "Moisture",
+  col_pct_dm: "% DM",
+  col_pct_me: "% ME",
+  col_grams: "Grams",
+
+  nutrient_contrib_title: "Per-ingredient Nutrients",
+  col_protein_g: "Protein g",
+  col_fat_g: "Fat g",
+  col_carb_g: "Carb g",
+  col_fiber_g: "Fiber g",
+  col_water_g: "Water g",
+  total_row: "Total",
+
+  notes_title: "Notes",
+  notes_empty: "(empty)",
 
   aafco_title: "AAFCO Compliance",
   aafco_subtitle: "Per kg dry matter, compared with the AAFCO 2016 profile.",
@@ -147,12 +198,36 @@ const zh: PdfDict = {
   saved_at: "保存于",
   status_draft: "草稿",
   status_approved: "已批准",
+  owner: "创建人",
+  pet_id: "宠物编号",
 
   current_recipe_title: "当前配方",
   ingredient: "食材",
   grams_col: "克数",
   pct_col: "占比",
   kcal_col: "千卡",
+
+  macros_title: "宏量营养素",
+  macro_protein: "蛋白质",
+  macro_fat: "脂肪",
+  macro_carb: "碳水化合物",
+  macro_fiber: "膳食纤维",
+  macro_ash: "灰分/其他",
+  macro_moisture: "水分",
+  col_pct_dm: "干物质 %",
+  col_pct_me: "代谢能 %",
+  col_grams: "克数",
+
+  nutrient_contrib_title: "各食材营养贡献",
+  col_protein_g: "蛋白质 g",
+  col_fat_g: "脂肪 g",
+  col_carb_g: "碳水 g",
+  col_fiber_g: "纤维 g",
+  col_water_g: "水分 g",
+  total_row: "合计",
+
+  notes_title: "备注",
+  notes_empty: "（无）",
 
   aafco_title: "AAFCO 合规",
   aafco_subtitle: "按每千克干物质计算，对照 AAFCO 2016 标准。",
@@ -202,12 +277,36 @@ const th: PdfDict = {
   saved_at: "บันทึก",
   status_draft: "ฉบับร่าง",
   status_approved: "อนุมัติแล้ว",
+  owner: "ผู้สร้าง",
+  pet_id: "รหัสสัตว์เลี้ยง",
 
   current_recipe_title: "สูตรปัจจุบัน",
   ingredient: "วัตถุดิบ",
   grams_col: "กรัม",
   pct_col: "% ของสูตร",
   kcal_col: "kcal",
+
+  macros_title: "สัดส่วนสารอาหารหลัก",
+  macro_protein: "โปรตีน",
+  macro_fat: "ไขมัน",
+  macro_carb: "คาร์โบไฮเดรต",
+  macro_fiber: "ใยอาหาร",
+  macro_ash: "เถ้า/อื่น ๆ",
+  macro_moisture: "ความชื้น",
+  col_pct_dm: "% DM",
+  col_pct_me: "% ME",
+  col_grams: "กรัม",
+
+  nutrient_contrib_title: "สารอาหารตามวัตถุดิบ",
+  col_protein_g: "โปรตีน ก.",
+  col_fat_g: "ไขมัน ก.",
+  col_carb_g: "คาร์บ ก.",
+  col_fiber_g: "ใย ก.",
+  col_water_g: "น้ำ ก.",
+  total_row: "รวม",
+
+  notes_title: "บันทึกเพิ่มเติม",
+  notes_empty: "(ว่าง)",
 
   aafco_title: "ความสอดคล้อง AAFCO",
   aafco_subtitle: "ต่อกิโลกรัมของวัตถุแห้ง เปรียบเทียบกับ AAFCO 2016",

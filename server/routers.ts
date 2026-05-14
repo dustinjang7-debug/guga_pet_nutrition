@@ -135,6 +135,7 @@ export const appRouter = router({
           recipe: {
             name: r.name,
             petName: r.petName ?? null,
+            petId: r.petId ?? null,
             species: r.species as "dog" | "cat",
             lifeStageKey: r.lifeStage,
             bodyWeightKg: Number(r.bodyWeightKg),
@@ -143,6 +144,8 @@ export const appRouter = router({
             notes: r.notes ?? null,
             status: (r.status as "draft" | "approved") ?? "draft",
             updatedAt: r.updatedAt ?? null,
+            ownerName: ctx.user.name ?? null,
+            ownerEmail: ctx.user.email ?? null,
           },
         });
         return {
