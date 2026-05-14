@@ -188,6 +188,7 @@ export function registerOAuthRoutes(app: Express) {
         openId: profile.sub,
         name: profile.name || null,
         email: profile.email ?? null,
+        picture: profile.picture ?? null,
         loginMethod: "google",
         lastSignedIn: new Date(),
       });

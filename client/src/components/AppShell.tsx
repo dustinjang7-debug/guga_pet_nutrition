@@ -1,5 +1,14 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from "@/components/ui/sheet";
@@ -8,6 +17,13 @@ import { type Lang, t, useLang } from "@/lib/i18n";
 import { LogOut, Menu, Sprout } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+
+function getInitial(name?: string | null, email?: string | null): string {
+  const source = (name || email || "").trim();
+  if (!source) return "?";
+  const codePoint = source.codePointAt(0);
+  return codePoint ? String.fromCodePoint(codePoint).toUpperCase() : "?";
+}
 
 const LANG_LABEL: Record<Lang, string> = {
   en: "EN",
@@ -95,20 +111,50 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             {isAuthenticated ? (
-              <>
-                <span className="text-sm text-muted-foreground hidden lg:inline truncate max-w-[12ch]">
-                  {user?.name}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={logout}
-                  title={t("nav_logout", lang)}
-                  className="hidden md:inline-flex"
-                >
-                  <LogOut className="size-4" />
-                </Button>
-              </>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title={user?.name ?? undefined}
+                    className="hidden md:flex items-center gap-2 rounded-full pl-1 pr-2 py-1 hover:bg-secondary/60 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Avatar className="size-7">
+                      {user?.picture ? (
+                        <AvatarImage
+                          src={user.picture}
+                          alt={user?.name ?? ""}
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : null}
+                      <AvatarFallback className="text-xs">
+                        {getInitial(user?.name, user?.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm text-muted-foreground hidden md:inline truncate max-w-[14ch]">
+                      {user?.name}
+                    </span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium truncate">
+                        {user?.name ?? user?.email ?? ""}
+                      </span>
+                      {user?.email && user?.name ? (
+                        <span className="text-xs text-muted-foreground truncate">
+                          {user.email}
+                        </span>
+                      ) : null}
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => { void logout(); }}>
+                    <LogOut className="size-4" />
+                    {t("nav_logout", lang)}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <Button asChild size="sm">
                 <a href={getLoginUrl()}>{t("sign_in", lang)}</a>
@@ -160,7 +206,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                   {isAuthenticated && (
                     <div className="flex items-center justify-between gap-2 text-sm">
-                      <span className="text-muted-foreground truncate">{user?.name}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Avatar className="size-7 shrink-0">
+                          {user?.picture ? (
+                            <AvatarImage
+                              src={user.picture}
+                              alt={user?.name ?? ""}
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : null}
+                          <AvatarFallback className="text-xs">
+                            {getInitial(user?.name, user?.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-foreground truncate">{user?.name ?? user?.email}</span>
+                      </div>
                       <Button variant="ghost" size="sm" onClick={logout}>
                         <LogOut className="size-4" />
                         {t("nav_logout", lang)}
