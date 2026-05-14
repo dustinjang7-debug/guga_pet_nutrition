@@ -110,6 +110,12 @@ export interface GeneratePdfInput {
     updatedAt?: Date | null;
     ownerName?: string | null;
     ownerEmail?: string | null;
+    /** Optional fields preserved for PDF round-trip import. */
+    feedingMode?: "normal" | "weight_loss";
+    workflow?: "wizard" | "simple" | "premix";
+    startingVolumeG?: number;
+    targetProteinPct?: number | null;
+    targetCarbPct?: number | null;
   };
 }
 
@@ -738,10 +744,25 @@ export async function generateRecipePdf(input: GeneratePdfInput): Promise<Buffer
     isGrowthLifeStage(recipe.species, recipe.lifeStageKey),
   );
 
+  // Embed the portable recipe both in PDF document info (Keywords) and as a
+  // marker after %%EOF below. The info dictionary is part of the PDF itself
+  // and survives any byte-level stripping of trailing data, so it acts as a
+  // robust fallback for the tail-marker import path.
+  const portableForInfo = recipeToPortableInput(input);
+  const portableJsonForInfo = portableForInfo
+    ? JSON.stringify(makeRecipeFile(portableForInfo))
+    : null;
+  const portableB64ForInfo = portableJsonForInfo
+    ? Buffer.from(portableJsonForInfo, "utf8").toString("base64")
+    : null;
+
   const doc = new PDFDocument({
     size: "A4",
     margins: { top: PAGE_MARGIN, bottom: FOOTER_RESERVE, left: PAGE_MARGIN, right: PAGE_MARGIN },
     bufferPages: true,
+    info: portableB64ForInfo
+      ? { Keywords: `${PDF_EMBED_MARKER_PREFIX}${portableB64ForInfo}` }
+      : undefined,
   });
 
   doc.registerFont("RegularFont", fonts.regular);
@@ -770,11 +791,10 @@ export async function generateRecipePdf(input: GeneratePdfInput): Promise<Buffer
 
   // Append a portable recipe file after %%EOF so the same PDF can be
   // re-imported into another account. PDF readers stop parsing at %%EOF,
-  // so trailing bytes don't affect rendering.
-  const portable = recipeToPortableInput(input);
-  if (portable) {
-    const fileJson = JSON.stringify(makeRecipeFile(portable));
-    const marker = `\n${PDF_EMBED_MARKER_PREFIX}${Buffer.from(fileJson, "utf8").toString("base64")}\n`;
+  // so trailing bytes don't affect rendering. If a tool strips trailing
+  // bytes the importer will fall back to the PDF Info dictionary above.
+  if (portableB64ForInfo) {
+    const marker = `\n${PDF_EMBED_MARKER_PREFIX}${portableB64ForInfo}\n`;
     return Buffer.concat([pdfBuffer, Buffer.from(marker, "utf8")]);
   }
   return pdfBuffer;
@@ -791,11 +811,11 @@ function recipeToPortableInput(input: GeneratePdfInput): PortableRecipe | null {
     lifeStage: r.lifeStageKey,
     bodyWeightKg: r.bodyWeightKg,
     lifeStageFactor: r.lifeStageFactor,
-    feedingMode: "normal",
-    workflow: "simple",
-    startingVolumeG: 1000,
-    targetProteinPct: null,
-    targetCarbPct: null,
+    feedingMode: r.feedingMode ?? "normal",
+    workflow: r.workflow ?? "simple",
+    startingVolumeG: r.startingVolumeG ?? 1000,
+    targetProteinPct: r.targetProteinPct ?? null,
+    targetCarbPct: r.targetCarbPct ?? null,
     items: r.items.map((it) => ({ ingredientId: it.ingredientId, grams: it.grams })),
     notes: r.notes ?? null,
   };

@@ -31,6 +31,29 @@ export async function getDb() {
   return _db;
 }
 
+/**
+ * Internal executor type — both the global drizzle handle and a per-request
+ * transaction handle expose the same query API. We type it as `any` here so
+ * helpers can accept either one without leaking drizzle's PgTransaction
+ * generics into every call site.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Executor = any;
+
+/**
+ * Run an async callback inside a single SQL transaction. We use this from
+ * routers so a row mutation and the matching `recipe_activity` row are
+ * committed atomically — partial failure can never leave the activity log
+ * out of sync with the underlying recipe state.
+ */
+export async function withTransaction<T>(
+  fn: (tx: Executor) => Promise<T>,
+): Promise<T> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => fn(tx));
+}
+
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) {
     throw new Error("User openId is required for upsert");
@@ -108,25 +131,19 @@ export async function getUserById(id: number) {
 export async function listRecipesByUser(userId: number): Promise<Array<Recipe & { role: "owner" | "editor" | "viewer" }>> {
   const db = await getDb();
   if (!db) return [];
-  // Owned
   const owned = await db
     .select()
     .from(recipes)
     .where(eq(recipes.userId, userId))
     .orderBy(desc(recipes.updatedAt));
-  // Shared via collaborator
   const sharedRows = await db
-    .select({
-      recipe: recipes,
-      role: recipeCollaborators.role,
-    })
+    .select({ recipe: recipes, role: recipeCollaborators.role })
     .from(recipeCollaborators)
     .innerJoin(recipes, eq(recipeCollaborators.recipeId, recipes.id))
     .where(eq(recipeCollaborators.userId, userId))
     .orderBy(desc(recipes.updatedAt));
   const shared = sharedRows.map((r) => ({ ...r.recipe, role: r.role as "editor" | "viewer" }));
   const ownedTagged = owned.map((r) => ({ ...r, role: "owner" as const }));
-  // De-dupe just in case (a user shouldn't be a collaborator on their own recipe)
   const seen = new Set<number>();
   const merged = [...ownedTagged, ...shared].filter((r) => {
     if (seen.has(r.id)) return false;
@@ -137,56 +154,81 @@ export async function listRecipesByUser(userId: number): Promise<Array<Recipe & 
   return merged;
 }
 
-export async function getRecipeRowById(id: number): Promise<Recipe | undefined> {
-  const db = await getDb();
-  if (!db) return undefined;
-  const rows = await db.select().from(recipes).where(eq(recipes.id, id)).limit(1);
+export async function getRecipeRowById(id: number, executor?: Executor): Promise<Recipe | undefined> {
+  const ex = executor ?? (await getDb());
+  if (!ex) return undefined;
+  const rows = await ex.select().from(recipes).where(eq(recipes.id, id)).limit(1);
   return rows[0];
 }
 
-export async function createRecipe(input: InsertRecipe): Promise<Recipe> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(recipes).values(input).returning();
+export async function createRecipe(input: InsertRecipe, executor?: Executor): Promise<Recipe> {
+  const ex = executor ?? (await getDb());
+  if (!ex) throw new Error("Database not available");
+  const result = await ex.insert(recipes).values(input).returning();
   if (!result[0]) throw new Error("Failed to create recipe");
   return result[0];
 }
 
-export async function updateRecipeById(id: number, patch: Partial<InsertRecipe>): Promise<Recipe | undefined> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db
+export async function updateRecipeById(
+  id: number,
+  patch: Partial<InsertRecipe>,
+  executor?: Executor,
+): Promise<Recipe | undefined> {
+  const ex = executor ?? (await getDb());
+  if (!ex) throw new Error("Database not available");
+  const result = await ex.update(recipes).set(patch).where(eq(recipes.id, id)).returning();
+  return result[0];
+}
+
+/**
+ * Compare-and-set update: only writes if the row's current `updatedAt`
+ * matches `expectedUpdatedAt`. Returns the new row on success, `undefined`
+ * if the precondition failed (i.e. someone else wrote concurrently). Pair
+ * with the `recipes.update` router to detect stale writes atomically — the
+ * pre-read + update window in the procedure is otherwise vulnerable to
+ * concurrent writers both passing the precheck.
+ */
+export async function updateRecipeIfUnchanged(
+  id: number,
+  expectedUpdatedAt: Date,
+  patch: Partial<InsertRecipe>,
+  executor?: Executor,
+): Promise<Recipe | undefined> {
+  const ex = executor ?? (await getDb());
+  if (!ex) throw new Error("Database not available");
+  const result = await ex
     .update(recipes)
     .set(patch)
-    .where(eq(recipes.id, id))
+    .where(and(eq(recipes.id, id), eq(recipes.updatedAt, expectedUpdatedAt)))
     .returning();
   return result[0];
 }
 
-export async function deleteRecipeById(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  // Cascade: remove collaborators, share link, activity. We don't have FK
-  // cascades configured, so do it explicitly.
-  await db.delete(recipeCollaborators).where(eq(recipeCollaborators.recipeId, id));
-  await db.delete(recipeShareLinks).where(eq(recipeShareLinks.recipeId, id));
-  await db.delete(recipeActivity).where(eq(recipeActivity.recipeId, id));
-  await db.delete(recipes).where(eq(recipes.id, id));
+export async function deleteRecipeById(id: number, executor?: Executor) {
+  const ex = executor ?? (await getDb());
+  if (!ex) throw new Error("Database not available");
+  await ex.delete(recipeCollaborators).where(eq(recipeCollaborators.recipeId, id));
+  await ex.delete(recipeShareLinks).where(eq(recipeShareLinks.recipeId, id));
+  await ex.delete(recipeActivity).where(eq(recipeActivity.recipeId, id));
+  await ex.delete(recipes).where(eq(recipes.id, id));
 }
 
 // ----------------------------------------------------------------------------
 // Activity log
 // ----------------------------------------------------------------------------
 
-export async function appendActivity(entry: {
-  recipeId: number;
-  actorUserId: number;
-  action: RecipeActivity["action"];
-  payload?: unknown;
-}): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(recipeActivity).values({
+export async function appendActivity(
+  entry: {
+    recipeId: number;
+    actorUserId: number;
+    action: RecipeActivity["action"];
+    payload?: unknown;
+  },
+  executor?: Executor,
+): Promise<void> {
+  const ex = executor ?? (await getDb());
+  if (!ex) return;
+  await ex.insert(recipeActivity).values({
     recipeId: entry.recipeId,
     actorUserId: entry.actorUserId,
     action: entry.action,
@@ -242,14 +284,13 @@ export async function getShareLinkByToken(token: string) {
   return rows[0];
 }
 
-export async function upsertShareLink(input: {
-  recipeId: number;
-  token: string;
-  createdByUserId: number;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db
+export async function upsertShareLink(
+  input: { recipeId: number; token: string; createdByUserId: number },
+  executor?: Executor,
+) {
+  const ex = executor ?? (await getDb());
+  if (!ex) throw new Error("Database not available");
+  const result = await ex
     .insert(recipeShareLinks)
     .values({
       recipeId: input.recipeId,
@@ -272,10 +313,10 @@ export async function upsertShareLink(input: {
   return result[0];
 }
 
-export async function disableShareLink(recipeId: number) {
-  const db = await getDb();
-  if (!db) return;
-  await db
+export async function disableShareLink(recipeId: number, executor?: Executor) {
+  const ex = executor ?? (await getDb());
+  if (!ex) return;
+  await ex
     .update(recipeShareLinks)
     .set({ isActive: false, revokedAt: new Date() })
     .where(eq(recipeShareLinks.recipeId, recipeId));
@@ -305,15 +346,18 @@ export async function listCollaborators(recipeId: number) {
   return rows;
 }
 
-export async function addOrUpdateCollaborator(input: {
-  recipeId: number;
-  userId: number;
-  role: "viewer" | "editor";
-  addedByUserId: number;
-}): Promise<{ created: boolean }> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const existing = await db
+export async function addOrUpdateCollaborator(
+  input: {
+    recipeId: number;
+    userId: number;
+    role: "viewer" | "editor";
+    addedByUserId: number;
+  },
+  executor?: Executor,
+): Promise<{ created: boolean }> {
+  const ex = executor ?? (await getDb());
+  if (!ex) throw new Error("Database not available");
+  const existing = await ex
     .select()
     .from(recipeCollaborators)
     .where(
@@ -325,14 +369,14 @@ export async function addOrUpdateCollaborator(input: {
     .limit(1);
   if (existing[0]) {
     if (existing[0].role !== input.role) {
-      await db
+      await ex
         .update(recipeCollaborators)
         .set({ role: input.role })
         .where(eq(recipeCollaborators.id, existing[0].id));
     }
     return { created: false };
   }
-  await db.insert(recipeCollaborators).values({
+  await ex.insert(recipeCollaborators).values({
     recipeId: input.recipeId,
     userId: input.userId,
     role: input.role,
@@ -341,10 +385,10 @@ export async function addOrUpdateCollaborator(input: {
   return { created: true };
 }
 
-export async function removeCollaborator(recipeId: number, userId: number) {
-  const db = await getDb();
-  if (!db) return;
-  await db
+export async function removeCollaborator(recipeId: number, userId: number, executor?: Executor) {
+  const ex = executor ?? (await getDb());
+  if (!ex) return;
+  await ex
     .delete(recipeCollaborators)
     .where(
       and(
@@ -354,5 +398,4 @@ export async function removeCollaborator(recipeId: number, userId: number) {
     );
 }
 
-// Quietly mark `or` as used so unused-import lint never fires across edits.
 void or;

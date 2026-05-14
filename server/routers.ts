@@ -21,7 +21,9 @@ import {
   listRecipesByUser,
   removeCollaborator,
   updateRecipeById,
+  updateRecipeIfUnchanged,
   upsertShareLink,
+  withTransaction,
 } from "./db";
 import { generateRecipePdf } from "./pdfExport";
 import { canManageSharing, canWrite, getRecipeAccess } from "./recipeAccess";
@@ -138,12 +140,20 @@ export const appRouter = router({
     create: protectedProcedure
       .input(recipeInputSchema)
       .mutation(async ({ ctx, input }) => {
-        const r = await createRecipe(inputToInsert(ctx.user.id, input));
-        await appendActivity({
-          recipeId: r.id,
-          actorUserId: ctx.user.id,
-          action: "created",
-          payload: { name: r.name },
+        // Tx: insert + activity must be atomic so the audit log can never
+        // diverge from the row state under partial failure.
+        const r = await withTransaction(async (tx) => {
+          const created = await createRecipe(inputToInsert(ctx.user.id, input), tx);
+          await appendActivity(
+            {
+              recipeId: created.id,
+              actorUserId: ctx.user.id,
+              action: "created",
+              payload: { name: created.name },
+            },
+            tx,
+          );
+          return created;
         });
         return { id: r.id };
       }),
@@ -169,40 +179,61 @@ export const appRouter = router({
         if (!canWrite(role)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Read-only access" });
         }
-        if (input.expectedUpdatedAt && recipe!.updatedAt) {
-          const expected = input.expectedUpdatedAt.getTime();
-          const actual = recipe!.updatedAt.getTime();
-          if (Math.abs(actual - expected) > 1) {
-            // Look up the last writer's display name for a friendlier dialog.
-            const writer = recipe!.updatedByUserId
-              ? await getUserById(recipe!.updatedByUserId)
-              : undefined;
-            throw new TRPCError({
-              code: "CONFLICT",
-              message: "Recipe was modified by someone else",
-              cause: {
-                kind: "stale-update",
-                lastUpdatedAt: recipe!.updatedAt.toISOString(),
-                lastUpdatedByName: writer?.name ?? writer?.email ?? null,
-              },
-            });
-          }
-        }
         const patch = partialInputToPatch(input.data, ctx.user.id);
-        const updated = await updateRecipeById(input.id, patch);
-        if (!updated) throw new TRPCError({ code: "NOT_FOUND" });
-        const diff = diffRecipes(recipe!, updated);
-        if (!isEmptyDiff(diff)) {
-          await appendActivity({
-            recipeId: input.id,
-            actorUserId: ctx.user.id,
-            action:
-              diff.fields.length === 1 && diff.fields[0]?.field === "status"
-                ? "status_changed"
-                : "edited",
-            payload: { diff },
+        // Use SQL compare-and-set when the client supplied a baseline so the
+        // staleness check and the write are one atomic operation. Without
+        // CAS, two concurrent writers can both pass a pre-read precheck and
+        // silently clobber each other.
+        const throwConflict = async () => {
+          const fresh = await getRecipeRowById(input.id);
+          const writer = fresh?.updatedByUserId
+            ? await getUserById(fresh.updatedByUserId)
+            : undefined;
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Recipe was modified by someone else",
+            cause: {
+              kind: "stale-update",
+              lastUpdatedAt: fresh?.updatedAt?.toISOString() ?? null,
+              lastUpdatedByName: writer?.name ?? writer?.email ?? null,
+            },
           });
-        }
+        };
+        const updated = await withTransaction(async (tx) => {
+          let u: Awaited<ReturnType<typeof updateRecipeById>>;
+          if (input.expectedUpdatedAt && recipe!.updatedAt) {
+            // CAS against the client's baseline, not the pre-read row —
+            // otherwise a writer that races between the pre-read and the
+            // CAS would still clobber. Postgres timestamp resolution is
+            // microsecond, so we don't need an epsilon here.
+            u = await updateRecipeIfUnchanged(
+              input.id,
+              input.expectedUpdatedAt,
+              patch,
+              tx,
+            );
+            if (!u) await throwConflict();
+          } else {
+            u = await updateRecipeById(input.id, patch, tx);
+            if (!u) throw new TRPCError({ code: "NOT_FOUND" });
+          }
+          const diff = diffRecipes(recipe!, u!);
+          if (!isEmptyDiff(diff)) {
+            await appendActivity(
+              {
+                recipeId: input.id,
+                actorUserId: ctx.user.id,
+                action:
+                  diff.fields.length === 1 && diff.fields[0]?.field === "status"
+                    ? "status_changed"
+                    : "edited",
+                payload: { diff },
+              },
+              tx,
+            );
+          }
+          return u!;
+        });
         return { success: true, updatedAt: updated.updatedAt } as const;
       }),
 
@@ -216,30 +247,39 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const { recipe } = await readRecipeWithRole(input.id, ctx.user.id);
         const r = recipe!;
-        const created = await createRecipe({
-          userId: ctx.user.id,
-          name: `${r.name}${input.nameSuffix ?? " (copy)"}`.slice(0, 200),
-          petName: r.petName,
-          petId: r.petId,
-          species: r.species,
-          lifeStage: r.lifeStage,
-          bodyWeightKg: r.bodyWeightKg,
-          lifeStageFactor: r.lifeStageFactor,
-          feedingMode: r.feedingMode,
-          workflow: r.workflow,
-          startingVolumeG: r.startingVolumeG,
-          targetProteinPct: r.targetProteinPct,
-          targetCarbPct: r.targetCarbPct,
-          items: r.items,
-          notes: r.notes,
-          status: "draft",
-          updatedByUserId: ctx.user.id,
-        });
-        await appendActivity({
-          recipeId: created.id,
-          actorUserId: ctx.user.id,
-          action: "duplicated",
-          payload: { sourceRecipeId: r.id, sourceName: r.name },
+        const created = await withTransaction(async (tx) => {
+          const c = await createRecipe(
+            {
+              userId: ctx.user.id,
+              name: `${r.name}${input.nameSuffix ?? " (copy)"}`.slice(0, 200),
+              petName: r.petName,
+              petId: r.petId,
+              species: r.species,
+              lifeStage: r.lifeStage,
+              bodyWeightKg: r.bodyWeightKg,
+              lifeStageFactor: r.lifeStageFactor,
+              feedingMode: r.feedingMode,
+              workflow: r.workflow,
+              startingVolumeG: r.startingVolumeG,
+              targetProteinPct: r.targetProteinPct,
+              targetCarbPct: r.targetCarbPct,
+              items: r.items,
+              notes: r.notes,
+              status: "draft",
+              updatedByUserId: ctx.user.id,
+            },
+            tx,
+          );
+          await appendActivity(
+            {
+              recipeId: c.id,
+              actorUserId: ctx.user.id,
+              action: "duplicated",
+              payload: { sourceRecipeId: r.id, sourceName: r.name },
+            },
+            tx,
+          );
+          return c;
         });
         return { id: created.id };
       }),
@@ -289,33 +329,42 @@ export const appRouter = router({
           throw e;
         }
         const r = parsed.recipe;
-        const created = await createRecipe({
-          userId: ctx.user.id,
-          name: `${r.name} (imported)`.slice(0, 200),
-          petName: r.petName ?? null,
-          petId: r.petId ?? null,
-          species: r.species,
-          lifeStage: r.lifeStage,
-          bodyWeightKg: r.bodyWeightKg.toString(),
-          lifeStageFactor: r.lifeStageFactor.toString(),
-          feedingMode: r.feedingMode,
-          workflow: r.workflow,
-          startingVolumeG: r.startingVolumeG,
-          targetProteinPct: r.targetProteinPct?.toString() ?? null,
-          targetCarbPct: r.targetCarbPct?.toString() ?? null,
-          items: r.items,
-          notes: r.notes ?? null,
-          status: "draft",
-          updatedByUserId: ctx.user.id,
-        });
-        await appendActivity({
-          recipeId: created.id,
-          actorUserId: ctx.user.id,
-          action: parsed.source === "pdf" ? "imported_from_pdf" : "imported_from_file",
-          payload: {
-            sourceName: r.name,
-            droppedIngredientIds: parsed.unknownIngredientIds,
-          },
+        const created = await withTransaction(async (tx) => {
+          const c = await createRecipe(
+            {
+              userId: ctx.user.id,
+              name: `${r.name} (imported)`.slice(0, 200),
+              petName: r.petName ?? null,
+              petId: r.petId ?? null,
+              species: r.species,
+              lifeStage: r.lifeStage,
+              bodyWeightKg: r.bodyWeightKg.toString(),
+              lifeStageFactor: r.lifeStageFactor.toString(),
+              feedingMode: r.feedingMode,
+              workflow: r.workflow,
+              startingVolumeG: r.startingVolumeG,
+              targetProteinPct: r.targetProteinPct?.toString() ?? null,
+              targetCarbPct: r.targetCarbPct?.toString() ?? null,
+              items: r.items,
+              notes: r.notes ?? null,
+              status: "draft",
+              updatedByUserId: ctx.user.id,
+            },
+            tx,
+          );
+          await appendActivity(
+            {
+              recipeId: c.id,
+              actorUserId: ctx.user.id,
+              action: parsed.source === "pdf" ? "imported_from_pdf" : "imported_from_file",
+              payload: {
+                sourceName: r.name,
+                droppedIngredientIds: parsed.unknownIngredientIds,
+              },
+            },
+            tx,
+          );
+          return c;
         });
         return {
           id: created.id,
@@ -328,10 +377,21 @@ export const appRouter = router({
      * Sharing — link + collaborator management. Owner-only.
      */
     share: router({
+      /**
+       * Owner-only: returns the active share token and full collaborator
+       * list. Editors and viewers must not see the share controls — the UI
+       * also gates on this, but enforcing it server-side closes the API.
+       */
       get: protectedProcedure
         .input(z.object({ id: z.number().int().positive() }))
         .query(async ({ ctx, input }) => {
           const { role } = await readRecipeWithRole(input.id, ctx.user.id);
+          if (!canManageSharing(role)) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message: "Only the owner can view sharing settings",
+            });
+          }
           const link = await getShareLinkByRecipe(input.id);
           const collaborators = await listCollaborators(input.id);
           return {
@@ -356,15 +416,15 @@ export const appRouter = router({
             throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can share" });
           }
           const token = await newShareToken();
-          await upsertShareLink({
-            recipeId: input.id,
-            token,
-            createdByUserId: ctx.user.id,
-          });
-          await appendActivity({
-            recipeId: input.id,
-            actorUserId: ctx.user.id,
-            action: "link_rotated",
+          await withTransaction(async (tx) => {
+            await upsertShareLink(
+              { recipeId: input.id, token, createdByUserId: ctx.user.id },
+              tx,
+            );
+            await appendActivity(
+              { recipeId: input.id, actorUserId: ctx.user.id, action: "link_rotated" },
+              tx,
+            );
           });
           return { token };
         }),
@@ -376,11 +436,12 @@ export const appRouter = router({
           if (!canManageSharing(role)) {
             throw new TRPCError({ code: "FORBIDDEN" });
           }
-          await disableShareLink(input.id);
-          await appendActivity({
-            recipeId: input.id,
-            actorUserId: ctx.user.id,
-            action: "link_disabled",
+          await withTransaction(async (tx) => {
+            await disableShareLink(input.id, tx);
+            await appendActivity(
+              { recipeId: input.id, actorUserId: ctx.user.id, action: "link_disabled" },
+              tx,
+            );
           });
           return { success: true } as const;
         }),
@@ -402,21 +463,29 @@ export const appRouter = router({
           if (!targetUser) {
             throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
           }
-          const result = await addOrUpdateCollaborator({
-            recipeId: input.id,
-            userId: input.userId,
-            role: input.role,
-            addedByUserId: ctx.user.id,
-          });
-          await appendActivity({
-            recipeId: input.id,
-            actorUserId: ctx.user.id,
-            action: result.created ? "collaborator_added" : "collaborator_role_changed",
-            payload: {
-              targetUserId: input.userId,
-              targetUserName: targetUser.name ?? targetUser.email ?? null,
-              role: input.role,
-            },
+          await withTransaction(async (tx) => {
+            const result = await addOrUpdateCollaborator(
+              {
+                recipeId: input.id,
+                userId: input.userId,
+                role: input.role,
+                addedByUserId: ctx.user.id,
+              },
+              tx,
+            );
+            await appendActivity(
+              {
+                recipeId: input.id,
+                actorUserId: ctx.user.id,
+                action: result.created ? "collaborator_added" : "collaborator_role_changed",
+                payload: {
+                  targetUserId: input.userId,
+                  targetUserName: targetUser.name ?? targetUser.email ?? null,
+                  role: input.role,
+                },
+              },
+              tx,
+            );
           });
           return { success: true } as const;
         }),
@@ -434,15 +503,20 @@ export const appRouter = router({
             throw new TRPCError({ code: "FORBIDDEN" });
           }
           const targetUser = await getUserById(input.userId);
-          await removeCollaborator(input.id, input.userId);
-          await appendActivity({
-            recipeId: input.id,
-            actorUserId: ctx.user.id,
-            action: "collaborator_removed",
-            payload: {
-              targetUserId: input.userId,
-              targetUserName: targetUser?.name ?? targetUser?.email ?? null,
-            },
+          await withTransaction(async (tx) => {
+            await removeCollaborator(input.id, input.userId, tx);
+            await appendActivity(
+              {
+                recipeId: input.id,
+                actorUserId: ctx.user.id,
+                action: "collaborator_removed",
+                payload: {
+                  targetUserId: input.userId,
+                  targetUserName: targetUser?.name ?? targetUser?.email ?? null,
+                },
+              },
+              tx,
+            );
           });
           return { success: true } as const;
         }),
@@ -480,22 +554,30 @@ export const appRouter = router({
           if (access.role) {
             return { recipeId: link.recipeId, role: access.role };
           }
-          await addOrUpdateCollaborator({
-            recipeId: link.recipeId,
-            userId: ctx.user.id,
-            role: "viewer",
-            addedByUserId: link.createdByUserId,
-          });
-          await appendActivity({
-            recipeId: link.recipeId,
-            actorUserId: ctx.user.id,
-            action: "collaborator_added",
-            payload: {
-              targetUserId: ctx.user.id,
-              targetUserName: ctx.user.name ?? ctx.user.email ?? null,
-              role: "viewer",
-              via: "share-link",
-            },
+          await withTransaction(async (tx) => {
+            await addOrUpdateCollaborator(
+              {
+                recipeId: link.recipeId,
+                userId: ctx.user.id,
+                role: "viewer",
+                addedByUserId: link.createdByUserId,
+              },
+              tx,
+            );
+            await appendActivity(
+              {
+                recipeId: link.recipeId,
+                actorUserId: ctx.user.id,
+                action: "collaborator_added",
+                payload: {
+                  targetUserId: ctx.user.id,
+                  targetUserName: ctx.user.name ?? ctx.user.email ?? null,
+                  role: "viewer",
+                  via: "share-link",
+                },
+              },
+              tx,
+            );
           });
           return { recipeId: link.recipeId, role: "viewer" as const };
         }),
@@ -564,6 +646,12 @@ export const appRouter = router({
             updatedAt: r.updatedAt ?? null,
             ownerName: ctx.user.name ?? null,
             ownerEmail: ctx.user.email ?? null,
+            // Pass through everything needed for a faithful import round-trip.
+            feedingMode: r.feedingMode as "normal" | "weight_loss",
+            workflow: r.workflow as "wizard" | "simple" | "premix",
+            startingVolumeG: r.startingVolumeG,
+            targetProteinPct: r.targetProteinPct ? Number(r.targetProteinPct) : null,
+            targetCarbPct: r.targetCarbPct ? Number(r.targetCarbPct) : null,
           },
         });
         return {

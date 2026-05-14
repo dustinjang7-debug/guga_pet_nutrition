@@ -25,23 +25,48 @@ export interface ParsedImport {
   unknownIngredientIds: number[];
 }
 
-function extractEmbeddedJson(buf: Buffer): string | null {
-  // Search the trailing 64 KiB for the marker — the marker is appended after
-  // %%EOF and PDFs we generate are well under 1 MiB, so a tail-scan is cheap
-  // and avoids decoding the (binary) PDF body.
-  const tail = buf.subarray(Math.max(0, buf.length - 65536)).toString("utf8");
-  const idx = tail.lastIndexOf(PDF_EMBED_MARKER_PREFIX);
-  if (idx < 0) return null;
-  const after = tail.slice(idx + PDF_EMBED_MARKER_PREFIX.length);
-  // Marker line ends at the next newline (or EOF).
-  const nl = after.search(/[\r\n]/);
-  const b64 = (nl >= 0 ? after.slice(0, nl) : after).trim();
+function decodeMarkerB64(b64: string): string | null {
   if (!b64) return null;
   try {
     return Buffer.from(b64, "base64").toString("utf8");
   } catch {
     return null;
   }
+}
+
+/** Read the marker from the trailing %%GUGA_RECIPE_v1: line (preferred). */
+function extractFromTail(buf: Buffer): string | null {
+  // Search the trailing 64 KiB only — appended marker is just past %%EOF
+  // and our PDFs are well under 1 MiB, so a tail-scan is cheap and
+  // avoids decoding the (binary) PDF body.
+  const tail = buf.subarray(Math.max(0, buf.length - 65536)).toString("utf8");
+  const idx = tail.lastIndexOf(PDF_EMBED_MARKER_PREFIX);
+  if (idx < 0) return null;
+  const after = tail.slice(idx + PDF_EMBED_MARKER_PREFIX.length);
+  const nl = after.search(/[\r\n]/);
+  return decodeMarkerB64((nl >= 0 ? after.slice(0, nl) : after).trim());
+}
+
+/**
+ * Fallback: read the marker from the PDF info dictionary `/Keywords` entry.
+ * Survives tools that strip trailing bytes after %%EOF. We deliberately keep
+ * this lightweight (no full PDF parse) — we just look for the literal
+ * `/Keywords (...)` sequence inside the PDF body.
+ */
+function extractFromInfoDict(buf: Buffer): string | null {
+  // PDF Info entries typically appear in plain ASCII inside the file body.
+  const text = buf.toString("latin1");
+  // Match (...) literal strings; PDF escapes parens with backslash, but we
+  // emit our marker via PDFKit's own escaping so a non-greedy match suffices.
+  const re = new RegExp(`/Keywords\\s*\\((${PDF_EMBED_MARKER_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[A-Za-z0-9+/=]+)\\)`);
+  const m = text.match(re);
+  if (!m) return null;
+  const value = m[1];
+  return decodeMarkerB64(value.slice(PDF_EMBED_MARKER_PREFIX.length));
+}
+
+function extractEmbeddedJson(buf: Buffer): string | null {
+  return extractFromTail(buf) ?? extractFromInfoDict(buf);
 }
 
 export class ImportError extends Error {
