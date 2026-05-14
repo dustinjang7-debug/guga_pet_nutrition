@@ -236,7 +236,11 @@ export default function RecipeBuilder() {
 
   function onDuplicateConflict() {
     if (!isEditing) return;
-    duplicateMut.mutate({ id: recipeId! });
+    // Send the *local* in-flight payload so the duplicate preserves the
+    // user's unsaved edits (the whole point of "Save as duplicate" after
+    // a conflict). Without this, the server would clone whatever the
+    // other editor just committed and the user's work would be lost.
+    duplicateMut.mutate({ id: recipeId!, payload: buildPayload() });
   }
 
   /**

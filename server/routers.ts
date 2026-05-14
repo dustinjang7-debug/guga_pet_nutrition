@@ -243,28 +243,54 @@ export const appRouter = router({
      * want their own forkable copy.
      */
     duplicate: protectedProcedure
-      .input(z.object({ id: z.number().int().positive(), nameSuffix: z.string().optional() }))
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          nameSuffix: z.string().optional(),
+          /**
+           * Optional in-flight edit payload. The conflict dialog passes
+           * this so "Save as duplicate" preserves the user's *unsaved*
+           * edits instead of cloning whatever the other editor just
+           * committed. When omitted (e.g. plain "fork this recipe"
+           * intent), we fall back to the current server row.
+           */
+          payload: recipeInputSchema.optional(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
         const { recipe } = await readRecipeWithRole(input.id, ctx.user.id);
-        const r = recipe!;
+        const serverRow = recipe!;
+        // Source the duplicate from the in-flight payload when present;
+        // otherwise fall back to the server row for a plain clone.
+        const src = input.payload
+          ? inputToInsert(ctx.user.id, input.payload)
+          : {
+              userId: ctx.user.id,
+              name: serverRow.name,
+              petName: serverRow.petName,
+              petId: serverRow.petId,
+              species: serverRow.species,
+              lifeStage: serverRow.lifeStage,
+              bodyWeightKg: serverRow.bodyWeightKg,
+              lifeStageFactor: serverRow.lifeStageFactor,
+              feedingMode: serverRow.feedingMode,
+              workflow: serverRow.workflow,
+              startingVolumeG: serverRow.startingVolumeG,
+              targetProteinPct: serverRow.targetProteinPct,
+              targetCarbPct: serverRow.targetCarbPct,
+              items: serverRow.items,
+              notes: serverRow.notes,
+              status: "draft" as const,
+              updatedByUserId: ctx.user.id,
+            };
         const created = await withTransaction(async (tx) => {
           const c = await createRecipe(
             {
+              ...src,
               userId: ctx.user.id,
-              name: `${r.name}${input.nameSuffix ?? " (copy)"}`.slice(0, 200),
-              petName: r.petName,
-              petId: r.petId,
-              species: r.species,
-              lifeStage: r.lifeStage,
-              bodyWeightKg: r.bodyWeightKg,
-              lifeStageFactor: r.lifeStageFactor,
-              feedingMode: r.feedingMode,
-              workflow: r.workflow,
-              startingVolumeG: r.startingVolumeG,
-              targetProteinPct: r.targetProteinPct,
-              targetCarbPct: r.targetCarbPct,
-              items: r.items,
-              notes: r.notes,
+              // The duplicate is always a draft owned by the caller and
+              // takes a "(copy)" suffix unless overridden.
+              name: `${src.name}${input.nameSuffix ?? " (copy)"}`.slice(0, 200),
               status: "draft",
               updatedByUserId: ctx.user.id,
             },
@@ -275,7 +301,11 @@ export const appRouter = router({
               recipeId: c.id,
               actorUserId: ctx.user.id,
               action: "duplicated",
-              payload: { sourceRecipeId: r.id, sourceName: r.name },
+              payload: {
+                sourceRecipeId: serverRow.id,
+                sourceName: serverRow.name,
+                fromUnsavedEdits: !!input.payload,
+              },
             },
             tx,
           );

@@ -47,6 +47,7 @@ interface ShareLinkRow {
   token: string;
   createdByUserId: number;
   isActive: boolean;
+  defaultRole: "viewer" | "editor";
   createdAt: Date;
   revokedAt: Date | null;
 }
@@ -194,22 +195,31 @@ vi.mock("./db", () => ({
     state.shareLinks.find((s) => s.recipeId === rid),
   getShareLinkByToken: async (token: string) =>
     state.shareLinks.find((s) => s.token === token),
-  upsertShareLink: async (input: { recipeId: number; token: string; createdByUserId: number }) => {
+  upsertShareLink: async (input: {
+    recipeId: number;
+    token: string;
+    createdByUserId: number;
+    defaultRole?: "viewer" | "editor";
+  }) => {
     const existing = state.shareLinks.find((s) => s.recipeId === input.recipeId);
     if (existing) {
       existing.token = input.token;
       existing.isActive = true;
       existing.revokedAt = null;
-      return existing;
+      if (input.defaultRole) existing.defaultRole = input.defaultRole;
+      return { row: existing, created: false };
     }
     const row: ShareLinkRow = {
-      ...input,
+      recipeId: input.recipeId,
+      token: input.token,
+      createdByUserId: input.createdByUserId,
+      defaultRole: input.defaultRole ?? "viewer",
       isActive: true,
       createdAt: new Date(),
       revokedAt: null,
     };
     state.shareLinks.push(row);
-    return row;
+    return { row, created: true };
   },
   disableShareLink: async (rid: number) => {
     const s = state.shareLinks.find((x) => x.recipeId === rid);
@@ -324,12 +334,34 @@ describe("recipes.share.* — link join + role enforcement", () => {
     expect(actions).toEqual(
       expect.arrayContaining([
         "created",
-        "link_rotated",
+        "shared",
         "collaborator_added",
         "collaborator_role_changed",
         "edited",
       ]),
     );
+  });
+
+  it("rotating an existing link logs `link_rotated`, not `shared`", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const id = await makeRecipe(1);
+    await owner.recipes.share.createOrRotate({ id }); // initial → "shared"
+    await owner.recipes.share.createOrRotate({ id }); // rotation → "link_rotated"
+    const actions = state.activity.filter((a) => a.recipeId === id).map((a) => a.action);
+    expect(actions).toContain("shared");
+    expect(actions).toContain("link_rotated");
+  });
+
+  it("share.join honors the link's defaultRole when the owner sets editor", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id, defaultRole: "editor" });
+    const join = await guest.recipes.share.join({ token });
+    expect(join.role).toBe("editor");
+    // Editor really can write.
+    await guest.recipes.update({ id, data: { name: "edited via editor link" } });
+    expect(state.recipes[0].name).toBe("edited via editor link");
   });
 
   it("non-owner cannot read share settings, but can read the recipe", async () => {
@@ -387,6 +419,42 @@ describe("recipes.update — concurrency CONFLICT", () => {
     const cause = caught!.cause as Record<string, unknown> | undefined;
     expect(cause?.kind).toBe("stale-update");
     expect(typeof cause?.lastUpdatedAt).toBe("string");
+  });
+
+  it("`Save as duplicate` after a conflict preserves the caller's unsaved edits", async () => {
+    // Reproduces the conflict-flow expectation: when two editors race,
+    // the loser's "Save as duplicate" must clone the *local* in-flight
+    // payload, not whatever the winning editor just wrote to the server.
+    const owner = appRouter.createCaller(ctxFor(1));
+    const id = await makeRecipe(1);
+
+    // Other editor commits first → server row is now "winner-version".
+    await owner.recipes.update({ id, data: { name: "winner-version" } });
+
+    // Loser's local form had different unsaved edits and a different
+    // ingredient list; this is what the conflict dialog should preserve.
+    const localPayload = {
+      name: "my-unsaved-version",
+      species: "dog" as const,
+      lifeStage: "adult",
+      bodyWeightKg: 12,
+      lifeStageFactor: 1.6,
+      feedingMode: "normal" as const,
+      workflow: "simple" as const,
+      startingVolumeG: 1500,
+      items: [{ ingredientId: 7, grams: 250 }],
+      status: "draft" as const,
+      notes: "loser's notes",
+    };
+    const dup = await owner.recipes.duplicate({ id, payload: localPayload });
+
+    const newRow = state.recipes.find((r) => r.id === dup.id)!;
+    expect(newRow.name).toBe("my-unsaved-version (copy)");
+    expect(newRow.notes).toBe("loser's notes");
+    expect(newRow.startingVolumeG).toBe(1500);
+    expect(newRow.items).toEqual([{ ingredientId: 7, grams: 250 }]);
+    // The original row keeps the winner's content.
+    expect(state.recipes.find((r) => r.id === id)!.name).toBe("winner-version");
   });
 
   it("succeeds when expectedUpdatedAt matches the current row", async () => {
