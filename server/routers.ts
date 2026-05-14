@@ -394,6 +394,12 @@ export const appRouter = router({
           }
           const link = await getShareLinkByRecipe(input.id);
           const collaborators = await listCollaborators(input.id);
+          // Surface the owner so the dialog can render a complete "people
+          // with access" list (Owner / Editor / Viewer rows). The owner row
+          // is informational only — the UI never offers role/remove
+          // controls for it.
+          const fresh = await getRecipeRowById(input.id);
+          const owner = fresh ? await getUserById(fresh.userId) : undefined;
           return {
             role,
             link: link
@@ -402,6 +408,13 @@ export const appRouter = router({
                   isActive: link.isActive,
                   createdAt: link.createdAt,
                   revokedAt: link.revokedAt,
+                }
+              : null,
+            owner: owner
+              ? {
+                  userId: owner.id,
+                  name: owner.name ?? null,
+                  email: owner.email ?? null,
                 }
               : null,
             collaborators,

@@ -65,8 +65,53 @@ function extractFromInfoDict(buf: Buffer): string | null {
   return decodeMarkerB64(value.slice(PDF_EMBED_MARKER_PREFIX.length));
 }
 
+/**
+ * Fallback: read the marker base64 from a PDF embedded-file (Filespec)
+ * stream. We avoid pulling in a full PDF parser; instead we look for our
+ * known filename and then decode the immediately-following uncompressed
+ * stream's checksum-stable JSON payload via the info-dict twin marker.
+ *
+ * In practice the info-dict path above already covers every PDF we emit,
+ * so this is a cheap structural sanity check rather than a separate
+ * extraction path: if the attachment is present but the info-dict is
+ * stripped we fall through to the raw byte search inside the file.
+ */
+function extractFromAttachment(buf: Buffer): string | null {
+  const text = buf.toString("latin1");
+  // Our attachment is always named "recipe.guga.json"; if it's not in the
+  // body there's nothing to find.
+  if (!text.includes("recipe.guga.json")) return null;
+  // The JSON we wrote is plain UTF-8 inside a single content stream. The
+  // first occurrence of `{"guga":` after the filename marker is our payload.
+  const after = text.indexOf("recipe.guga.json");
+  const open = text.indexOf('{"guga":', after);
+  if (open < 0) return null;
+  // Walk forward to the matching closing brace (depth-tracked, ignoring
+  // anything inside string literals — JSON has no nested strings to worry
+  // about beyond escaped quotes).
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(open, i + 1);
+    }
+  }
+  return null;
+}
+
 function extractEmbeddedJson(buf: Buffer): string | null {
-  return extractFromTail(buf) ?? extractFromInfoDict(buf);
+  return extractFromTail(buf) ?? extractFromInfoDict(buf) ?? extractFromAttachment(buf);
 }
 
 export class ImportError extends Error {

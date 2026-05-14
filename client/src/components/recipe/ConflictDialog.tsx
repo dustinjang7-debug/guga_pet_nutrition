@@ -7,7 +7,7 @@
  * cancel and reload to see the latest.
  */
 
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,10 +30,24 @@ interface Props {
   conflict: ConflictInfo | null;
   onOverwrite: () => void;
   onDuplicate: () => void;
+  /**
+   * Discard local edits and refetch the latest server state. Wired by the
+   * builder to invalidate the recipes.get query and reset the editor's
+   * dirty buffer so the user sees the other writer's version.
+   */
+  onCancelAndReload: () => void;
   pending?: boolean;
 }
 
-export function ConflictDialog({ open, onOpenChange, conflict, onOverwrite, onDuplicate, pending }: Props) {
+export function ConflictDialog({
+  open,
+  onOpenChange,
+  conflict,
+  onOverwrite,
+  onDuplicate,
+  onCancelAndReload,
+  pending,
+}: Props) {
   const who = conflict?.lastUpdatedByName ?? "Someone else";
   const when = conflict?.lastUpdatedAt
     ? new Date(conflict.lastUpdatedAt).toLocaleString()
@@ -53,8 +67,9 @@ export function ConflictDialog({ open, onOpenChange, conflict, onOverwrite, onDu
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
+          <Button variant="ghost" onClick={onCancelAndReload} disabled={pending}>
+            <RefreshCw className="size-4" />
+            Cancel and reload
           </Button>
           <Button variant="outline" onClick={onDuplicate} disabled={pending}>
             Save as duplicate

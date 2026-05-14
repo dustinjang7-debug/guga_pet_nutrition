@@ -38,6 +38,8 @@ import { INGREDIENT_BY_ID } from "@shared/ingredients";
 import { type PdfLang, pt } from "@shared/pdfI18n";
 import {
   PDF_EMBED_MARKER_PREFIX,
+  RECIPE_FILE_EXT,
+  RECIPE_FILE_MIME,
   makeRecipeFile,
   type PortableRecipe,
 } from "@shared/recipeFile";
@@ -768,6 +770,24 @@ export async function generateRecipePdf(input: GeneratePdfInput): Promise<Buffer
   doc.registerFont("RegularFont", fonts.regular);
   doc.registerFont("BoldFont", fonts.bold);
   doc.font("RegularFont");
+
+  // Primary embedding mechanism: a real PDF embedded file (Filespec) so any
+  // PDF-spec-compliant tool (Acrobat, Foxit, our importer's attachment path)
+  // can extract the .guga.json directly from the document. The /Keywords
+  // info-dict entry above and the trailing %%EOF marker below are kept as
+  // fallbacks for environments that strip attachments.
+  if (portableJsonForInfo) {
+    // `relationship` ("Source") is part of PDF/A-3's AFRelationship spec
+    // and is honored by PDFKit at runtime, but the @types/pdfkit upstream
+    // hasn't caught up — cast to avoid a false TS error.
+    doc.file(Buffer.from(portableJsonForInfo, "utf8"), {
+      name: `recipe${RECIPE_FILE_EXT}`,
+      type: RECIPE_FILE_MIME,
+      description: "Guga portable recipe (auto-importable)",
+      creationDate: new Date(),
+      relationship: "Source",
+    } as PDFKit.Mixins.PDFAttachmentOptions & { relationship?: string });
+  }
 
   const chunks: Buffer[] = [];
   const done = new Promise<Buffer>((resolve, reject) => {

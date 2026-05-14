@@ -239,6 +239,20 @@ export default function RecipeBuilder() {
     duplicateMut.mutate({ id: recipeId! });
   }
 
+  /**
+   * "Cancel and reload": discard the in-flight save, drop our local edits,
+   * and refetch the recipe so the editor reflects the other writer's
+   * version. The query refetch repopulates form state via the existing
+   * recipeQuery.data effect downstream.
+   */
+  function onCancelAndReloadConflict() {
+    setConflictOpen(false);
+    setConflictInfo(null);
+    if (isEditing) {
+      void utils.recipes.get.invalidate({ id: recipeId! });
+    }
+  }
+
   const isSaving = createMut.isPending || updateMut.isPending;
   const used = items.reduce((s, i) => s + i.grams, 0);
 
@@ -434,6 +448,7 @@ export default function RecipeBuilder() {
         conflict={conflictInfo}
         onOverwrite={onOverwriteConflict}
         onDuplicate={onDuplicateConflict}
+        onCancelAndReload={onCancelAndReloadConflict}
         pending={updateMut.isPending || duplicateMut.isPending}
       />
     </AppShell>

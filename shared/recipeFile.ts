@@ -41,8 +41,15 @@ export const portableRecipeSchema = z.object({
 
 export type PortableRecipe = z.infer<typeof portableRecipeSchema>;
 
+/**
+ * The top-level wrapper is intentionally version-tolerant: we accept any
+ * positive integer for `guga` so an importer running an older build can
+ * still read files exported by a newer build, as long as the inner
+ * `recipe` shape parses. Breaking shape changes should add fields with
+ * `.nullish()` defaults rather than bumping into a strict literal.
+ */
 export const recipeFileSchema = z.object({
-  guga: z.literal(RECIPE_FILE_VERSION),
+  guga: z.number().int().positive(),
   exportedAt: z.string().optional(),
   recipe: portableRecipeSchema,
 });

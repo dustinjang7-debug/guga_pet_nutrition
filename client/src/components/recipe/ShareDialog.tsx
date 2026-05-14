@@ -71,6 +71,7 @@ export function ShareDialog({ recipeId, role }: Props) {
   const isOwner = role === "owner";
   const link = shareQuery.data?.link;
   const collaborators = shareQuery.data?.collaborators ?? [];
+  const owner = shareQuery.data?.owner ?? null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -154,13 +155,29 @@ export function ShareDialog({ recipeId, role }: Props) {
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 <Users className="inline size-3 mr-1" /> People with access
               </Label>
-              {collaborators.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No-one else has accepted yet. The link grants viewer access.
-                </p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {collaborators.map((c) => (
+              <ul className="space-y-1.5">
+                {/* Owner row — informational only, never editable. */}
+                {owner && (
+                  <li className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">
+                        {owner.name ?? owner.email ?? `User #${owner.userId}`}
+                      </div>
+                      {owner.email && owner.name && (
+                        <div className="text-xs text-muted-foreground truncate">{owner.email}</div>
+                      )}
+                    </div>
+                    <span className="text-xs uppercase tracking-wider px-2 py-0.5 rounded bg-primary/10 text-primary">
+                      Owner
+                    </span>
+                  </li>
+                )}
+                {collaborators.length === 0 ? (
+                  <li className="text-sm text-muted-foreground px-1">
+                    No-one else has access yet. The link grants viewer access.
+                  </li>
+                ) : (
+                  collaborators.map((c) => (
                     <li
                       key={c.id}
                       className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2"
@@ -205,9 +222,9 @@ export function ShareDialog({ recipeId, role }: Props) {
                         )}
                       </div>
                     </li>
-                  ))}
-                </ul>
-              )}
+                  ))
+                )}
+              </ul>
             </div>
           </div>
         )}

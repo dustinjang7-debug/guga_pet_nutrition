@@ -1,5 +1,7 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
+import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgDatabase } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 import {
   InsertUser,
@@ -33,12 +35,14 @@ export async function getDb() {
 
 /**
  * Internal executor type — both the global drizzle handle and a per-request
- * transaction handle expose the same query API. We type it as `any` here so
- * helpers can accept either one without leaking drizzle's PgTransaction
+ * transaction handle extend `PgDatabase`, which is the common base class
+ * exposing the query API (select/insert/update/delete). Helpers accept this
+ * union so they work seamlessly inside or outside a `withTransaction` block
+ * without leaking the verbose `NodePgTransaction<TFullSchema, TSchema>`
  * generics into every call site.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Executor = any;
+type Executor = PgDatabase<NodePgQueryResultHKT, any, any>;
 
 /**
  * Run an async callback inside a single SQL transaction. We use this from
@@ -398,4 +402,3 @@ export async function removeCollaborator(recipeId: number, userId: number, execu
     );
 }
 
-void or;
