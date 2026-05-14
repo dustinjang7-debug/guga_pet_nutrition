@@ -110,8 +110,13 @@ function extractFromAttachment(buf: Buffer): string | null {
   return null;
 }
 
+/**
+ * Extraction precedence: attachment (true PDF Filespec, the spec-aligned
+ * primary embed) → info-dict /Keywords → trailing %%EOF marker. Any
+ * tool-stripped variant still resolves through one of the fallbacks.
+ */
 function extractEmbeddedJson(buf: Buffer): string | null {
-  return extractFromTail(buf) ?? extractFromInfoDict(buf) ?? extractFromAttachment(buf);
+  return extractFromAttachment(buf) ?? extractFromInfoDict(buf) ?? extractFromTail(buf);
 }
 
 export class ImportError extends Error {
