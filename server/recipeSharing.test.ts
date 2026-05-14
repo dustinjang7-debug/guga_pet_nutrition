@@ -393,6 +393,99 @@ describe("recipes.share.* — link join + role enforcement", () => {
       code: "NOT_FOUND",
     });
   });
+
+  it("disabling the link does not revoke existing collaborators' access", async () => {
+    // The link is just an *invitation* mechanism. Once a viewer/editor
+    // is on the recipe, disabling the link should not silently kick
+    // them off — only `removeCollaborator` should.
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id });
+    await guest.recipes.share.join({ token });
+    await owner.recipes.share.disable({ id });
+
+    // Guest still has viewer access to the recipe.
+    const r = await guest.recipes.get({ id });
+    expect(r.role).toBe("viewer");
+  });
+
+  it("owner.share.get returns link + collaborators + owner row", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id });
+    await guest.recipes.share.join({ token });
+
+    const settings = await owner.recipes.share.get({ id });
+    expect(settings.role).toBe("owner");
+    expect(settings.link?.token).toBe(token);
+    expect(settings.link?.isActive).toBe(true);
+    expect(settings.owner).toMatchObject({ userId: 1, name: "Owner" });
+    expect(settings.collaborators).toHaveLength(1);
+    expect(settings.collaborators[0]).toMatchObject({ userId: 2, role: "viewer" });
+  });
+
+  it("editor (non-owner) cannot rotate the share link or change roles", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const third = appRouter.createCaller(ctxFor(3));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id, defaultRole: "editor" });
+    await guest.recipes.share.join({ token }); // guest is now editor
+
+    // Editors can write but must not be able to manage sharing.
+    await expect(guest.recipes.share.createOrRotate({ id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(
+      guest.recipes.share.setRole({ id, userId: 3, role: "editor" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(guest.recipes.share.disable({ id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+
+    // And a third party with no role at all cannot even read the recipe.
+    await expect(third.recipes.get({ id })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("removeCollaborator strips access and logs the action", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id });
+    await guest.recipes.share.join({ token });
+
+    // Sanity: guest has access before removal.
+    expect((await guest.recipes.get({ id })).role).toBe("viewer");
+
+    await owner.recipes.share.removeCollaborator({ id, userId: 2 });
+
+    // After removal, guest is back to a stranger.
+    await expect(guest.recipes.get({ id })).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    const removalEntries = state.activity.filter(
+      (a) => a.recipeId === id && a.action === "collaborator_removed",
+    );
+    expect(removalEntries).toHaveLength(1);
+    expect(removalEntries[0]?.payload).toMatchObject({
+      targetUserId: 2,
+      targetUserName: "Guest",
+    });
+  });
+
+  it("non-owner cannot remove collaborators", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id, defaultRole: "editor" });
+    await guest.recipes.share.join({ token });
+
+    // Even an editor can't kick anyone off — including themselves.
+    await expect(
+      guest.recipes.share.removeCollaborator({ id, userId: 2 }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
 
 describe("recipes.update — concurrency CONFLICT", () => {
