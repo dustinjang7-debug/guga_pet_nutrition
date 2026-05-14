@@ -1,0 +1,1 @@
+ALTER TABLE "recipe_share_links" ADD COLUMN "defaultRole" "collaborator_role" DEFAULT 'viewer' NOT NULL;

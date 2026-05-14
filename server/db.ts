@@ -1,7 +1,8 @@
+import type { ExtractTablesWithRelations } from "drizzle-orm";
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import type { NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
-import type { PgDatabase } from "drizzle-orm/pg-core";
+import type { NodePgDatabase, NodePgQueryResultHKT } from "drizzle-orm/node-postgres";
+import type { PgTransaction } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 import {
   InsertUser,
@@ -34,15 +35,25 @@ export async function getDb() {
 }
 
 /**
- * Internal executor type — both the global drizzle handle and a per-request
- * transaction handle extend `PgDatabase`, which is the common base class
- * exposing the query API (select/insert/update/delete). Helpers accept this
- * union so they work seamlessly inside or outside a `withTransaction` block
- * without leaking the verbose `NodePgTransaction<TFullSchema, TSchema>`
- * generics into every call site.
+ * Internal executor type — the union of the top-level drizzle handle and
+ * the transaction handle that `db.transaction()` passes to its callback.
+ * Both expose the same select/insert/update/delete query API. We derive
+ * the transaction type directly from `NodePgDatabase['transaction']` so
+ * the union stays in lock-step with whatever generics drizzle uses
+ * internally, without us having to spell out the verbose
+ * `NodePgTransaction<TFullSchema, TSchema>` form (or fall back to `any`).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Executor = PgDatabase<NodePgQueryResultHKT, any, any>;
+type Db = NodePgDatabase<Record<string, never>>;
+// Drizzle's runtime tx callback widens the schema generics to
+// `Record<string, unknown>` regardless of how the parent db is typed, so
+// we name that exact shape here. Both Db and Tx extend `PgDatabase`, which
+// supplies the select/insert/update/delete API our helpers use.
+type Tx = PgTransaction<
+  NodePgQueryResultHKT,
+  Record<string, unknown>,
+  ExtractTablesWithRelations<Record<string, unknown>>
+>;
+type Executor = Db | Tx;
 
 /**
  * Run an async callback inside a single SQL transaction. We use this from
@@ -289,11 +300,26 @@ export async function getShareLinkByToken(token: string) {
 }
 
 export async function upsertShareLink(
-  input: { recipeId: number; token: string; createdByUserId: number },
+  input: {
+    recipeId: number;
+    token: string;
+    createdByUserId: number;
+    defaultRole?: "viewer" | "editor";
+  },
   executor?: Executor,
-) {
+): Promise<{ row: typeof recipeShareLinks.$inferSelect; created: boolean }> {
   const ex = executor ?? (await getDb());
   if (!ex) throw new Error("Database not available");
+  // We need to know whether the row already existed (initial share vs.
+  // rotation) so the caller can emit the right activity event. Drizzle
+  // doesn't expose that directly via onConflictDoUpdate, so we read first.
+  const existing = await ex
+    .select()
+    .from(recipeShareLinks)
+    .where(eq(recipeShareLinks.recipeId, input.recipeId))
+    .limit(1);
+  const wasCreate = existing.length === 0;
+  const role = input.defaultRole ?? existing[0]?.defaultRole ?? "viewer";
   const result = await ex
     .insert(recipeShareLinks)
     .values({
@@ -302,6 +328,7 @@ export async function upsertShareLink(
       createdByUserId: input.createdByUserId,
       isActive: true,
       revokedAt: null,
+      defaultRole: role,
     })
     .onConflictDoUpdate({
       target: recipeShareLinks.recipeId,
@@ -311,10 +338,11 @@ export async function upsertShareLink(
         revokedAt: null,
         createdByUserId: input.createdByUserId,
         createdAt: new Date(),
+        defaultRole: role,
       },
     })
     .returning();
-  return result[0];
+  return { row: result[0], created: wasCreate };
 }
 
 export async function disableShareLink(recipeId: number, executor?: Executor) {

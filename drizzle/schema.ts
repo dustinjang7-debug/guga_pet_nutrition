@@ -121,6 +121,13 @@ export const recipeShareLinks = pgTable("recipe_share_links", {
   recipeId: integer("recipeId").notNull().unique(),
   token: varchar("token", { length: 64 }).notNull().unique(),
   isActive: boolean("isActive").default(true).notNull(),
+  /**
+   * Role granted to anyone who joins via this link. Today the UI only
+   * exposes "viewer" (matching the original product spec — the owner can
+   * promote later via setRole), but the column is wired through so a
+   * future "send-as-editor" link doesn't require a schema change.
+   */
+  defaultRole: collaboratorRoleEnum("defaultRole").default("viewer").notNull(),
   createdByUserId: integer("createdByUserId").notNull(),
   createdAt: timestamp("createdAt", { withTimezone: true }).defaultNow().notNull(),
   revokedAt: timestamp("revokedAt", { withTimezone: true }),

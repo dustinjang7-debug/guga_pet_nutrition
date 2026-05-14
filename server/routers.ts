@@ -422,7 +422,15 @@ export const appRouter = router({
         }),
 
       createOrRotate: protectedProcedure
-        .input(z.object({ id: z.number().int().positive() }))
+        .input(
+          z.object({
+            id: z.number().int().positive(),
+            // Optional override for the role granted to link visitors. If
+            // omitted, an existing link keeps its current defaultRole and a
+            // brand-new link defaults to "viewer".
+            defaultRole: z.enum(["viewer", "editor"]).optional(),
+          }),
+        )
         .mutation(async ({ ctx, input }) => {
           const { role } = await readRecipeWithRole(input.id, ctx.user.id);
           if (!canManageSharing(role)) {
@@ -430,12 +438,25 @@ export const appRouter = router({
           }
           const token = await newShareToken();
           await withTransaction(async (tx) => {
-            await upsertShareLink(
-              { recipeId: input.id, token, createdByUserId: ctx.user.id },
+            const { created } = await upsertShareLink(
+              {
+                recipeId: input.id,
+                token,
+                createdByUserId: ctx.user.id,
+                defaultRole: input.defaultRole,
+              },
               tx,
             );
+            // Differentiate the activity entry: initial creation logs
+            // `shared` (matching the enum's intent), rotations log
+            // `link_rotated`. This keeps the timeline readable and the
+            // enum free of dead values.
             await appendActivity(
-              { recipeId: input.id, actorUserId: ctx.user.id, action: "link_rotated" },
+              {
+                recipeId: input.id,
+                actorUserId: ctx.user.id,
+                action: created ? "shared" : "link_rotated",
+              },
               tx,
             );
           });
@@ -567,12 +588,15 @@ export const appRouter = router({
           if (access.role) {
             return { recipeId: link.recipeId, role: access.role };
           }
+          // Honor the link's defaultRole (typically "viewer", but the
+          // owner can configure it via createOrRotate).
+          const grantRole = link.defaultRole ?? "viewer";
           await withTransaction(async (tx) => {
             await addOrUpdateCollaborator(
               {
                 recipeId: link.recipeId,
                 userId: ctx.user.id,
-                role: "viewer",
+                role: grantRole,
                 addedByUserId: link.createdByUserId,
               },
               tx,
@@ -585,14 +609,14 @@ export const appRouter = router({
                 payload: {
                   targetUserId: ctx.user.id,
                   targetUserName: ctx.user.name ?? ctx.user.email ?? null,
-                  role: "viewer",
+                  role: grantRole,
                   via: "share-link",
                 },
               },
               tx,
             );
           });
-          return { recipeId: link.recipeId, role: "viewer" as const };
+          return { recipeId: link.recipeId, role: grantRole };
         }),
     }),
 
