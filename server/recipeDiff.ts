@@ -126,6 +126,64 @@ export function diffRecipes(prev: Recipe, next: Recipe): RecipeDiff {
   };
 }
 
+/**
+ * Plain-JSON snapshot of a recipe's content at a point in time. Stored on
+ * `recipe_activity.payload.snapshot` for content-changing actions (created,
+ * edited, status_changed, imported_from_*, duplicated) so owners/editors can
+ * restore the recipe to any previous version from the History panel.
+ *
+ * Shape mirrors the tRPC `recipeInputSchema` (numbers as numbers, items as
+ * array) so the restore path can feed it back through the same patch builder.
+ */
+export interface RecipeSnapshot {
+  name: string;
+  petName: string | null;
+  petId: string | null;
+  species: "dog" | "cat";
+  lifeStage: string;
+  bodyWeightKg: number;
+  lifeStageFactor: number;
+  feedingMode: "normal" | "weight_loss";
+  workflow: "wizard" | "simple" | "premix";
+  startingVolumeG: number;
+  targetProteinPct: number | null;
+  targetCarbPct: number | null;
+  items: Array<{ ingredientId: number; grams: number }>;
+  notes: string | null;
+  status: "draft" | "approved";
+}
+
+function toNum(v: unknown): number {
+  if (v === null || v === undefined) return NaN;
+  return typeof v === "string" ? parseFloat(v) : Number(v);
+}
+
+function toNumOrNull(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  const n = toNum(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function recipeToSnapshot(r: Recipe): RecipeSnapshot {
+  return {
+    name: r.name,
+    petName: r.petName ?? null,
+    petId: r.petId ?? null,
+    species: r.species,
+    lifeStage: r.lifeStage,
+    bodyWeightKg: toNum(r.bodyWeightKg),
+    lifeStageFactor: toNum(r.lifeStageFactor),
+    feedingMode: r.feedingMode,
+    workflow: r.workflow,
+    startingVolumeG: r.startingVolumeG,
+    targetProteinPct: toNumOrNull(r.targetProteinPct),
+    targetCarbPct: toNumOrNull(r.targetCarbPct),
+    items: readItems(r.items),
+    notes: r.notes ?? null,
+    status: r.status,
+  };
+}
+
 export function isEmptyDiff(d: RecipeDiff): boolean {
   return (
     d.ingredientsAdded.length === 0 &&

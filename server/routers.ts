@@ -12,6 +12,7 @@ import {
   createRecipe,
   deleteRecipeById,
   disableShareLink,
+  getActivityById,
   getRecipeRowById,
   getShareLinkByRecipe,
   getShareLinkByToken,
@@ -28,7 +29,7 @@ import {
 } from "./db";
 import { generateRecipePdf } from "./pdfExport";
 import { canManageSharing, canWrite, getRecipeAccess } from "./recipeAccess";
-import { diffRecipes, isEmptyDiff } from "./recipeDiff";
+import { diffRecipes, isEmptyDiff, recipeToSnapshot, type RecipeSnapshot } from "./recipeDiff";
 import { ImportError, parseRecipeImport } from "./recipeImport";
 
 const recipeItemSchema = z.object({
@@ -150,7 +151,7 @@ export const appRouter = router({
               recipeId: created.id,
               actorUserId: ctx.user.id,
               action: "created",
-              payload: { name: created.name },
+              payload: { name: created.name, snapshot: recipeToSnapshot(created) },
             },
             tx,
           );
@@ -228,7 +229,7 @@ export const appRouter = router({
                   diff.fields.length === 1 && diff.fields[0]?.field === "status"
                     ? "status_changed"
                     : "edited",
-                payload: { diff },
+                payload: { diff, snapshot: recipeToSnapshot(u!) },
               },
               tx,
             );
@@ -306,6 +307,7 @@ export const appRouter = router({
                 sourceRecipeId: serverRow.id,
                 sourceName: serverRow.name,
                 fromUnsavedEdits: !!input.payload,
+                snapshot: recipeToSnapshot(c),
               },
             },
             tx,
@@ -353,6 +355,69 @@ export const appRouter = router({
         await readRecipeWithRole(input.id, ctx.user.id);
         await markRecipeActivitySeen(ctx.user.id, input.id);
         return { success: true } as const;
+      }),
+
+    /**
+     * Restore the recipe to a snapshot captured by a previous activity entry.
+     *
+     * Implementation choice: rather than playing diffs in reverse, every
+     * content-changing activity (created, edited, status_changed, imported,
+     * duplicated) carries a `snapshot` of the post-change state. Restoring
+     * is just an LWW write of that snapshot — the audit trail is preserved
+     * because we emit a fresh `edited` activity tagged with
+     * `restoredFromActivityId`.
+     *
+     * Anyone with write access (owner or editor) may restore. There is no
+     * optimistic-concurrency precondition: per the task spec, restore
+     * intentionally wins over any concurrent edit and the resulting diff
+     * shows the world what changed.
+     */
+    restoreVersion: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          activityId: z.number().int().positive(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { recipe, role } = await readRecipeWithRole(input.id, ctx.user.id);
+        if (!canWrite(role)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Read-only access" });
+        }
+        const activity = await getActivityById(input.activityId, input.id);
+        if (!activity) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Activity entry not found" });
+        }
+        const payload = (activity.payload ?? {}) as { snapshot?: RecipeSnapshot };
+        const snapshot = payload.snapshot;
+        if (!snapshot) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "This activity entry has no snapshot to restore",
+          });
+        }
+        const updated = await withTransaction(async (tx) => {
+          const patch = partialInputToPatch(snapshot, ctx.user.id);
+          const u = await updateRecipeById(input.id, patch, tx);
+          if (!u) throw new TRPCError({ code: "NOT_FOUND" });
+          const diff = diffRecipes(recipe!, u);
+          await appendActivity(
+            {
+              recipeId: input.id,
+              actorUserId: ctx.user.id,
+              action: "edited",
+              payload: {
+                diff,
+                snapshot: recipeToSnapshot(u),
+                restoredFromActivityId: activity.id,
+                restoredFromCreatedAt: activity.createdAt.toISOString(),
+              },
+            },
+            tx,
+          );
+          return u;
+        });
+        return { success: true, updatedAt: updated.updatedAt } as const;
       }),
 
     /**
@@ -410,6 +475,7 @@ export const appRouter = router({
               payload: {
                 sourceName: r.name,
                 droppedIngredientIds: parsed.unknownIngredientIds,
+                snapshot: recipeToSnapshot(c),
               },
             },
             tx,

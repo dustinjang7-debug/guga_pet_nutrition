@@ -3,7 +3,7 @@
  * `edited` / `status_changed` actions.
  */
 
-import { History, Loader2 } from "lucide-react";
+import { History, Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ingredientName } from "@/lib/i18n";
 import { useLang } from "@/lib/i18n";
@@ -21,6 +21,12 @@ import { Button } from "@/components/ui/button";
 
 interface Props {
   recipeId: number;
+  /**
+   * Whether the current user can write to this recipe. Restore is gated on
+   * write access (owner/editor) — viewers see the timeline but no Restore
+   * buttons. The server enforces this too.
+   */
+  canWrite?: boolean;
 }
 
 interface IngredientChange {
@@ -87,7 +93,7 @@ function DiffSummary({ diff, lang }: { diff: RecipeDiff; lang: "en" | "zh" | "th
   );
 }
 
-export function HistoryPanel({ recipeId }: Props) {
+export function HistoryPanel({ recipeId, canWrite = false }: Props) {
   const [lang] = useLang();
   const [open, setOpen] = useState(false);
   const utils = trpc.useUtils();
@@ -106,6 +112,29 @@ export function HistoryPanel({ recipeId }: Props) {
       utils.recipes.list.invalidate();
     }
   }, [open, isSuccess, utils]);
+  const restoreMutation = trpc.recipes.restoreVersion.useMutation({
+    onSuccess: async () => {
+      // Refetch the recipe (so the form/UI reloads from the restored
+      // state), the history (so the new "edited" entry appears), and the
+      // home list (so the unread badge / updated timestamp is current).
+      await Promise.all([
+        utils.recipes.get.invalidate({ id: recipeId }),
+        utils.recipes.history.invalidate({ id: recipeId }),
+        utils.recipes.list.invalidate(),
+      ]);
+    },
+  });
+
+  const onRestore = (activityId: number, when: string) => {
+    if (
+      !window.confirm(
+        `Restore the recipe to its state from ${when}? Your current state will be saved as a new edit you can revert if needed.`,
+      )
+    ) {
+      return;
+    }
+    restoreMutation.mutate({ id: recipeId, activityId });
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -129,8 +158,23 @@ export function HistoryPanel({ recipeId }: Props) {
             <p className="text-sm text-muted-foreground py-6">No activity yet.</p>
           ) : (
             <ol className="space-y-4 mt-4">
-              {historyQuery.data.map((entry) => {
-                const payload = (entry.payload ?? {}) as { diff?: RecipeDiff } & Record<string, unknown>;
+              {historyQuery.data.map((entry, idx) => {
+                const payload = (entry.payload ?? {}) as {
+                  diff?: RecipeDiff;
+                  snapshot?: unknown;
+                  restoredFromActivityId?: number;
+                } & Record<string, unknown>;
+                const when = new Date(entry.createdAt).toLocaleString();
+                // Restore is offered when:
+                //  - the entry carries a snapshot (created/edited/imported/duplicated)
+                //  - the user can write
+                //  - it isn't the most recent entry (no point restoring to current state)
+                const hasSnapshot = !!payload.snapshot;
+                const isLatest = idx === 0;
+                const showRestore = canWrite && hasSnapshot && !isLatest;
+                const isRestoringThis =
+                  restoreMutation.isPending &&
+                  restoreMutation.variables?.activityId === entry.id;
                 return (
                   <li key={entry.id} className="border-l-2 border-muted pl-3">
                     <div className="flex items-baseline justify-between gap-2">
@@ -138,12 +182,17 @@ export function HistoryPanel({ recipeId }: Props) {
                         {ACTION_LABEL[entry.action] ?? entry.action}
                       </div>
                       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {new Date(entry.createdAt).toLocaleString()}
+                        {when}
                       </div>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       by {entry.actorName ?? entry.actorEmail ?? `User #${entry.actorUserId}`}
                     </div>
+                    {typeof payload.restoredFromActivityId === "number" && (
+                      <div className="text-xs text-muted-foreground italic mt-1">
+                        Restored from an earlier version
+                      </div>
+                    )}
                     {payload.diff && <DiffSummary diff={payload.diff} lang={lang} />}
                     {!payload.diff && payload.targetUserName !== undefined && (
                       <div className="text-xs text-muted-foreground mt-1">
@@ -157,6 +206,23 @@ export function HistoryPanel({ recipeId }: Props) {
                           Dropped {(payload.droppedIngredientIds as unknown[]).length} unknown ingredient(s)
                         </div>
                       )}
+                    {showRestore && (
+                      <div className="mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={restoreMutation.isPending}
+                          onClick={() => onRestore(entry.id, when)}
+                        >
+                          {isRestoringThis ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <RotateCcw className="size-3.5" />
+                          )}
+                          Restore this version
+                        </Button>
+                      </div>
+                    )}
                   </li>
                 );
               })}

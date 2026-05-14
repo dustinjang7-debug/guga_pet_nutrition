@@ -330,6 +330,26 @@ export async function markRecipeActivitySeen(
     });
 }
 
+/**
+ * Fetch a single activity entry by its id, scoped to a recipe so callers
+ * can't accidentally read across recipes. Used by the restore-version flow
+ * to read the snapshot stored on a previous edit/created entry.
+ */
+export async function getActivityById(
+  activityId: number,
+  recipeId: number,
+  executor?: Executor,
+): Promise<RecipeActivity | undefined> {
+  const ex = executor ?? (await getDb());
+  if (!ex) return undefined;
+  const rows = await ex
+    .select()
+    .from(recipeActivity)
+    .where(and(eq(recipeActivity.id, activityId), eq(recipeActivity.recipeId, recipeId)))
+    .limit(1);
+  return rows[0];
+}
+
 export async function listActivityForRecipe(recipeId: number) {
   const db = await getDb();
   if (!db) return [];

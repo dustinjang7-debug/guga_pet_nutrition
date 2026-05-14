@@ -301,7 +301,7 @@ export default function RecipeBuilder() {
                 {t("rebalance_title", lang)}
               </Button>
             )}
-            {isEditing && <HistoryPanel recipeId={recipeId!} />}
+            {isEditing && <HistoryPanel recipeId={recipeId!} canWrite={!isReadOnly} />}
             {isEditing && role === "owner" && <ShareDialog recipeId={recipeId!} role={role} />}
             <ExportRecipeButton recipeId={isEditing ? recipeId : undefined} />
             {!isReadOnly && (

@@ -186,6 +186,8 @@ vi.mock("./db", () => ({
   appendActivity: async (entry: Omit<ActivityRow, "id" | "createdAt">) => {
     state.activity.push({ ...entry, id: state.nextActivityId++, createdAt: new Date() });
   },
+  getActivityById: async (activityId: number, recipeId: number) =>
+    state.activity.find((a) => a.id === activityId && a.recipeId === recipeId),
   listActivityForRecipe: async (rid: number) =>
     state.activity
       .filter((a) => a.recipeId === rid)
@@ -548,6 +550,82 @@ describe("recipes.update — concurrency CONFLICT", () => {
     expect(newRow.items).toEqual([{ ingredientId: 7, grams: 250 }]);
     // The original row keeps the winner's content.
     expect(state.recipes.find((r) => r.id === id)!.name).toBe("winner-version");
+  });
+
+  it("restoreVersion rolls the recipe back to a snapshot from a prior edit", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const id = await makeRecipe(1);
+
+    // v2 edit
+    await owner.recipes.update({
+      id,
+      data: { name: "v2", items: [{ ingredientId: 1, grams: 200 }] },
+    });
+    // v3 edit
+    await owner.recipes.update({
+      id,
+      data: { name: "v3", items: [{ ingredientId: 2, grams: 300 }] },
+    });
+    expect(state.recipes[0].name).toBe("v3");
+    expect(state.recipes[0].items).toEqual([{ ingredientId: 2, grams: 300 }]);
+
+    // The v2 edit activity carries a snapshot of the v2 state.
+    const v2Activity = state.activity.find(
+      (a) =>
+        a.recipeId === id &&
+        a.action === "edited" &&
+        (a.payload as { snapshot?: { name: string } } | null)?.snapshot?.name === "v2",
+    );
+    expect(v2Activity).toBeDefined();
+    expect(
+      (v2Activity!.payload as { snapshot: { items: unknown } }).snapshot.items,
+    ).toEqual([{ ingredientId: 1, grams: 200 }]);
+
+    // Restore to v2.
+    const out = await owner.recipes.restoreVersion({ id, activityId: v2Activity!.id });
+    expect(out.success).toBe(true);
+    expect(state.recipes[0].name).toBe("v2");
+    expect(state.recipes[0].items).toEqual([{ ingredientId: 1, grams: 200 }]);
+
+    // A new activity entry is appended with restoredFromActivityId so the
+    // audit trail records the restore as a normal edit.
+    const newest = state.activity.filter((a) => a.recipeId === id).slice(-1)[0];
+    expect(newest.action).toBe("edited");
+    const newestPayload = newest.payload as {
+      restoredFromActivityId?: number;
+      snapshot?: { name: string };
+      diff?: unknown;
+    };
+    expect(newestPayload.restoredFromActivityId).toBe(v2Activity!.id);
+    expect(newestPayload.snapshot?.name).toBe("v2");
+    expect(newestPayload.diff).toBeDefined();
+  });
+
+  it("restoreVersion is forbidden for viewers", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const guest = appRouter.createCaller(ctxFor(2));
+    const id = await makeRecipe(1);
+    const { token } = await owner.recipes.share.createOrRotate({ id });
+    await guest.recipes.share.join({ token });
+    await owner.recipes.update({ id, data: { name: "v2" } });
+    const v2 = state.activity.find(
+      (a) => a.recipeId === id && a.action === "edited",
+    )!;
+    await expect(
+      guest.recipes.restoreVersion({ id, activityId: v2.id }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("restoreVersion rejects entries without a snapshot (e.g. share events)", async () => {
+    const owner = appRouter.createCaller(ctxFor(1));
+    const id = await makeRecipe(1);
+    await owner.recipes.share.createOrRotate({ id });
+    const shareEntry = state.activity.find(
+      (a) => a.recipeId === id && a.action === "shared",
+    )!;
+    await expect(
+      owner.recipes.restoreVersion({ id, activityId: shareEntry.id }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("succeeds when expectedUpdatedAt matches the current row", async () => {
