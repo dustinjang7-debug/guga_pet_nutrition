@@ -1,18 +1,22 @@
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import { and, desc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { InsertUser, recipes, users, type InsertRecipe } from "../drizzle/schema";
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _pool: Pool | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
+      _pool = null;
     }
   }
   return _db;
@@ -56,8 +60,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -68,9 +72,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    await db
+      .insert(users)
+      .values(values)
+      .onConflictDoUpdate({ target: users.openId, set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -89,14 +94,9 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
-
 // ----------------------------------------------------------------------------
 // Recipe helpers
 // ----------------------------------------------------------------------------
-
-import { and, desc } from "drizzle-orm";
-import { recipes, type InsertRecipe } from "../drizzle/schema";
 
 export async function listRecipesByUser(userId: number) {
   const db = await getDb();
@@ -118,10 +118,8 @@ export async function getRecipeById(userId: number, id: number) {
 export async function createRecipe(input: InsertRecipe): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(recipes).values(input);
-  // mysql2 returns insertId on the result header
-  // drizzle types it as ResultSetHeader; cast and read
-  return (result as unknown as { insertId: number }[])[0]?.insertId ?? 0;
+  const result = await db.insert(recipes).values(input).returning({ id: recipes.id });
+  return result[0]?.id ?? 0;
 }
 
 export async function updateRecipe(userId: number, id: number, patch: Partial<InsertRecipe>) {

@@ -8,10 +8,10 @@ Web app for composing AAFCO-aligned fresh-food pet recipes from a 238-ingredient
 - Start (prod): `pnpm run start`
 - Typecheck: `pnpm run check`
 - Tests: `pnpm run test`
-- DB migrate: `pnpm run db:push` (requires MySQL `DATABASE_URL`)
+- DB migrate: `pnpm run db:push` (uses Postgres `DATABASE_URL`)
 
 Env vars (all optional for local boot — DB and auth are lazy):
-`DATABASE_URL` (mysql), `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_OPEN_ID`, `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`.
+`DATABASE_URL` (Postgres — provided automatically by Replit), `JWT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_OPEN_ID`, `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY`.
 
 ## Auth (Google OAuth)
 - Sign-in: `GET /api/auth/google/login` → Google consent → `GET /api/auth/google/callback` → sets HS256 JWT session cookie (signed with `JWT_SECRET`) and redirects home.
@@ -27,7 +27,7 @@ Env vars (all optional for local boot — DB and auth are lazy):
 - Node 20, pnpm, TypeScript 5.9
 - React 19 + Vite 7 + TailwindCSS 4 + wouter
 - Express 4 + tRPC 11
-- Drizzle ORM (MySQL via mysql2)
+- Drizzle ORM (PostgreSQL via node-postgres)
 
 ## Where things live
 - `client/` — React app (Vite root)

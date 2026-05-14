@@ -1,26 +1,12 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1777214667707,
-      "tag": "0000_lumpy_johnny_blaze",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1777214984146,
-      "tag": "0001_young_mister_sinister",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1777828268045,
-      "tag": "0002_lying_marvel_boy",
+      "version": "7",
+      "when": 1778741854280,
+      "tag": "0000_milky_black_bolt",
       "breakpoints": true
     }
   ]
